@@ -1,0 +1,12 @@
+// Esquema inicial — esqueleto vacío, sin tablas de negocio todavía (ver constitution.md).
+// El estado de una partida en vivo NUNCA vive aquí, solo lo persistente
+// (bancos de contenido, cuentas de host cuando existan).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

@@ -2,7 +2,7 @@
 
 Aplica la pirámide de pruebas acordada: muchas unitarias, algunas de integración, pocas e2e. Cada criterio Given/When/Then de spec.md debe trazar a al menos una prueba (unitaria o e2e, según corresponda).
 
-## Unitarias (Jest) — la base
+## Unitarias (Vitest) — la base
 
 Cubren toda la lógica de juego pura, sin red ni WebSocket real:
 - `GameEngineCore`: transición de fases, manejo de temporizador, cálculo de puntaje.

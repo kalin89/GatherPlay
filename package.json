@@ -1,0 +1,19 @@
+{
+  "name": "family-game-app",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:backend": "npm run start:dev --workspace apps/backend",
+    "dev:frontend": "npm run dev --workspace apps/frontend",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "prisma@6.19.3": true,
+    "unrs-resolver@1.12.2": true
+  }
+}

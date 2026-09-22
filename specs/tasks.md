@@ -6,9 +6,9 @@ Backlog inicial, en orden. Cada tarea se implementa y se cierra antes de pasar a
 
 ## Fase 0 — Setup
 
-- [ ] Inicializar monorepo (backend NestJS + frontend Next.js), lint/formatter, CI básico (lint + test en cada push).
-- [ ] Configurar Postgres local + migraciones vacías (esqueleto, sin tablas de negocio todavía).
-- [ ] Endpoint/gateway WebSocket mínimo: conectar, desconectar, echo — sin lógica de juego, solo probar que la conexión pantalla↔servidor↔celular funciona de punta a punta.
+- [x] Inicializar monorepo (backend NestJS + frontend Next.js), lint/formatter, CI básico (lint + test en cada push).
+- [x] Configurar Postgres local + migraciones vacías (esqueleto, sin tablas de negocio todavía).
+- [x] Endpoint/gateway WebSocket mínimo: conectar, desconectar, echo — sin lógica de juego, solo probar que la conexión pantalla↔servidor↔celular funciona de punta a punta.
 
 ## Fase 1 — Motor de sala (base de todo lo demás)
 

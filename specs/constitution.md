@@ -21,7 +21,7 @@ App web para jugar en familia/amigos en reuniones presenciales: una pantalla com
 - **Frontend:** Next.js, con dos superficies separadas: vista "pantalla" (host/TV) y vista "control" (jugador/celular), ambas como clientes del mismo WebSocket de sala.
 - **Persistencia:** Postgres, usado únicamente para lo que sí debe sobrevivir a una partida (cuentas de host cuando existan, bancos de preguntas/canciones personalizados, historial). No se usa para el estado en vivo de una partida.
 - **Auth:** JWT, reservado para cuentas de host cuando se implementen. Jugadores usan un token efímero de sala, no cuenta real.
-- **Testing:** unitarias (Jest) para toda la lógica de juego; e2e (Playwright) para flujos críticos de cada minijuego; pruebas de aceptación derivadas directamente de los criterios Given/When/Then del spec. Ver testing-strategy.md.
+- **Testing:** unitarias (Vitest) para toda la lógica de juego; e2e (Playwright) para flujos críticos de cada minijuego; pruebas de aceptación derivadas directamente de los criterios Given/When/Then del spec. Ver testing-strategy.md.
 
 ## Fuera de alcance para v1
 
