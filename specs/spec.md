@@ -25,6 +25,16 @@ Familias y grupos de amigos reunidos presencialmente, sin perfil técnico. Debe 
 - **Jugador**: nombre, equipo asignado, conexión activa (celular).
 - **Ronda**: minijuego, turno actual (equipo/jugador), temporizador, resultado.
 
+## Motor de sala
+
+Criterios del "RoomModule" (Fase 1 de tasks.md): crear sala, generar código, unirse por código, listar jugadores conectados. No incluye todavía armado de equipos ni fases de juego (`jugando`/`resultados`) — esos criterios se agregan aquí cuando les toque su propia tarea.
+
+- **Given** ningún dato previo, **when** el host crea una partida, **then** se genera un código único de sala y la sala queda en estado `lobby` sin jugadores.
+- **Given** un código de sala válido en estado `lobby`, **when** un jugador se une con un nombre, **then** se agrega a la lista de jugadores de esa sala y todos los clientes conectados a esa sala reciben la lista actualizada.
+- **Given** un código de sala que no existe, **when** un jugador intenta unirse con ese código, **then** recibe un error y no se agrega a ninguna sala.
+- **Given** dos jugadores uniéndose a la misma sala al mismo tiempo, **when** ambos envían su solicitud de unión, **then** ambos quedan registrados sin pisarse entre sí (sin condición de carrera que pierda a uno de los dos).
+- **Given** un jugador conectado a una sala, **when** pierde la conexión (cierra la pestaña o se corta el WebSocket), **then** se remueve de la lista de jugadores y el resto de los clientes ven la lista actualizada. (Reconexión con el mismo código sin perder el lugar es Fase 4 — fuera de esta tarea.)
+
 ## Minijuegos
 
 ### 1. Mímica / Caras y Gestos

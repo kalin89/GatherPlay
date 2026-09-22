@@ -12,7 +12,7 @@ Backlog inicial, en orden. Cada tarea se implementa y se cierra antes de pasar a
 
 ## Fase 1 — Motor de sala (base de todo lo demás)
 
-- [ ] `RoomModule`: crear sala, generar código, unirse por código, listar jugadores conectados.
+- [x] `RoomModule`: crear sala, generar código, unirse por código, listar jugadores conectados.
 - [ ] Armado de equipos (manual por el host + opción aleatoria).
 - [ ] `GameEngineCore`: fases de sala (`lobby` → `jugando` → `resultados`), temporizador genérico, puntaje por equipo.
 - [ ] Vista `/screen/[roomCode]` mostrando QR + código + jugadores/equipos en lobby.
