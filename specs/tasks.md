@@ -1,5 +1,7 @@
 # Tasks — Family Game App
 
+**Cómo se usa este archivo:** es el índice general, una línea por tarea. Nunca se le agrega detalle técnico, subtareas ni análisis aquí — eso vive en `specs/features/<juego>/analysis.md` (y su propio `tasks.md` si una tarea necesita desglosarse en subtareas más chicas). Así, para trabajar una tarea puntual (ej. Mímica) solo hace falta leer su carpeta en `features/`, no este archivo completo. Si este archivo empieza a crecer con explicaciones largas, es señal de que ese contenido se movió al lugar equivocado.
+
 Backlog inicial, en orden. Cada tarea se implementa y se cierra antes de pasar a la siguiente; una tarea "lista" significa código + pruebas pasando, no solo código escrito. Se marca [ ] pendiente / [x] hecho.
 
 ## Fase 0 — Setup
