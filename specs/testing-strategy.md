@@ -31,6 +31,18 @@ Se escribe un archivo e2e por minijuego, no uno gigante — así una prueba frá
 - Carga/concurrencia con muchas salas simultáneas (fuera de alcance mientras el escalamiento a Redis no exista — ver plan.md).
 - Compatibilidad exhaustiva entre navegadores/dispositivos — se prueba manualmente en la reunión real como parte de la validación del hobby project.
 
+## Checklist manual (requisito para cerrar una tarea)
+
+Las pruebas automatizadas no cubren todo lo que importa en un juego que se juega en vivo, en una sala real, con celulares y una pantalla compartida. Por eso ninguna tarea de `tasks.md` se marca como [x] solo porque las pruebas automatizadas pasan en verde — también necesita pasar esta checklist mínima:
+
+- [ ] Probado desde al menos dos celulares reales (no solo devtools/emulador), conectados a la misma red WiFi.
+- [ ] La pantalla compartida se probó en una pantalla grande (TV o proyector) — legibilidad de texto y tamaño del QR desde varios metros de distancia.
+- [ ] Se probó qué pasa si un jugador pierde señal WiFi un momento y vuelve a entrar con el mismo código.
+- [ ] El flujo se jugó de principio a fin como lo jugaría un familiar sin contexto técnico, sin que nadie le explique qué hacer.
+- [ ] Se probó el caso límite específico del minijuego descrito en spec.md.
+
+Cada `specs/features/<juego>/analysis.md` agrega, al final, los puntos de checklist manual propios de ESE juego (ej. para Tararea y Adivina: confirmar que la canción no se escucha por las bocinas de la pantalla compartida, solo en los audífonos de quien tararea).
+
 ## CI
 
 Todo lo anterior corre en cada push/PR. Una prueba e2e que empiece a fallar de forma intermitente (flaky) se marca y se revisa antes de silenciarla — no se borra sin entender por qué falla.

@@ -11,11 +11,12 @@ Familias y grupos de amigos reunidos presencialmente, sin perfil técnico. Debe 
 ## Flujo general
 
 1. El host abre la app en la pantalla compartida y crea una partida → se genera un código/QR.
-2. Los jugadores escanean el QR o entran el código desde su celular y ponen su nombre. Sin registro.
-3. El host arma los equipos (o deja que la app los arme al azar).
-4. El host elige el minijuego a jugar (de la lista disponible) y arranca la ronda.
-5. La pantalla compartida muestra el estado del juego (pregunta, tablero, tiempo, turno); cada celular muestra los controles propios de ese juego (botón de respuesta, lienzo para dibujar, botón de "ya dije la palabra", etc.).
-6. Al terminar la ronda se muestran resultados/puntaje y se puede elegir el siguiente juego.
+2. EL host crea el nombre de cada equipo y elije color del equipo.
+3. Los jugadores escanean el QR o entran el código desde su celular y ponen su nombre. Sin registro.
+4. El host arma los equipos (o deja que la app los arme al azar).
+5. El host elige el minijuego a jugar (de la lista disponible) y arranca la ronda.
+6. La pantalla compartida muestra el estado del juego (pregunta, tablero, tiempo, turno); cada celular muestra los controles propios de ese juego (botón de respuesta, lienzo para dibujar, botón de "ya dije la palabra", etc.).
+7. Al terminar la ronda se muestran resultados/puntaje y se puede elegir el siguiente juego.
 
 ## Modelo funcional de sala
 
