@@ -56,3 +56,11 @@ Con un solo proceso backend basta para uso familiar/reuniones (decenas de salas 
 ## Convenciones de código
 
 Siguiendo tus patrones habituales: Clean Architecture en el backend (separar dominio del juego de la infraestructura de WebSocket/Socket.io), JWT reservado para cuando exista auth de host, middlewares de NestJS para validar payloads de eventos antes de que lleguen a la lógica de juego.
+
+Principios SOLID como base de todo el código, backend y frontend, no solo como buena intención:
+
+- **S**: cada módulo de minijuego resuelve un solo juego; `GameEngineCore` resuelve turnos/tiempo/puntaje, nada más — no se mezclan responsabilidades entre ellos.
+- **O**: agregar un minijuego nuevo no debe requerir tocar `GameEngineCore` ni los módulos de otros juegos, solo registrar el nuevo módulo.
+- **L**: cualquier módulo de minijuego debe poder sustituir a otro donde se espera la interfaz común (`startRound`, `handlePlayerAction`, `resolveRound`) sin romper al `GameEngineCore`.
+- **I**: interfaces chicas y específicas (ej. no forzar a un minijuego sin buzzer a implementar métodos de buzzer que no usa).
+- **D**: los módulos de minijuego dependen de abstracciones (`AiContentModule`, el contrato del Gateway), nunca de implementaciones concretas de Socket.io o del cliente de IA — así se pueden probar unitariamente sin levantar red real.
