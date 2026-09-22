@@ -64,3 +64,12 @@ Principios SOLID como base de todo el código, backend y frontend, no solo como 
 - **L**: cualquier módulo de minijuego debe poder sustituir a otro donde se espera la interfaz común (`startRound`, `handlePlayerAction`, `resolveRound`) sin romper al `GameEngineCore`.
 - **I**: interfaces chicas y específicas (ej. no forzar a un minijuego sin buzzer a implementar métodos de buzzer que no usa).
 - **D**: los módulos de minijuego dependen de abstracciones (`AiContentModule`, el contrato del Gateway), nunca de implementaciones concretas de Socket.io o del cliente de IA — así se pueden probar unitariamente sin levantar red real.
+
+### Secretos y variables de entorno
+
+Ningún secreto (contraseña, usuario de base de datos, API key, token) se escribe hardcodeado en un archivo versionado — ni en código, ni en `docker-compose.yml`, ni en configuración. Siempre se expone como variable de entorno:
+
+- Cada paquete/servicio que necesita secretos (raíz para `docker-compose.yml`, `apps/backend` para el backend) tiene su propio `.env` (ignorado por git) y un `.env.example` versionado con valores de ejemplo no sensibles, documentando qué variables existen.
+- `docker-compose.yml` y el código solo leen `process.env.X` / `${X}` — nunca un valor literal de secreto.
+- Antes de commitear, se revisa que ningún archivo agregado tenga un secreto real pegado directamente (ni siquiera "solo para desarrollo local" — el hábito es lo que se protege, no un valor puntual).
+- Si un secreto se filtra igual (se commitea por error), se rota, no alcanza con borrarlo del archivo en un commit nuevo.
