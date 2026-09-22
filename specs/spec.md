@@ -1,4 +1,4 @@
-# Spec — Family Game App
+# Spec — GatherPlay
 
 ## Visión
 

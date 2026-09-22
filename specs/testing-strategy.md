@@ -1,4 +1,4 @@
-# Estrategia de pruebas — Family Game App
+# Estrategia de pruebas — GatherPlay
 
 Aplica la pirámide de pruebas acordada: muchas unitarias, algunas de integración, pocas e2e. Cada criterio Given/When/Then de spec.md debe trazar a al menos una prueba (unitaria o e2e, según corresponda).
 
@@ -42,6 +42,8 @@ Las pruebas automatizadas no cubren todo lo que importa en un juego que se juega
 - [ ] Se probó el caso límite específico del minijuego descrito en spec.md.
 
 Cada `specs/features/<juego>/analysis.md` agrega, al final, los puntos de checklist manual propios de ESE juego (ej. para Tararea y Adivina: confirmar que la canción no se escucha por las bocinas de la pantalla compartida, solo en los audífonos de quien tararea).
+
+**Excepción explícita:** una tarea de puro backend, sin ninguna UI todavía conectada a ella (ej. `RoomModule` en Fase 1, antes de que existan las vistas `/screen` y `/play`), no tiene checklist manual propio que pasar — no hay celular ni pantalla real que tocar todavía. Se marca `[x]` con solo pruebas automatizadas en verde, y el checklist manual completo se aplica recién en la primera tarea de esa fase que sí integra una UI real (ej. la tarea de "E2E: camino feliz" de Fase 1).
 
 ## CI
 

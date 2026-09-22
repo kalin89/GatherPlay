@@ -1,4 +1,4 @@
-# Plan técnico — Family Game App
+# Plan técnico — GatherPlay
 
 Traduce spec.md a arquitectura concreta, respetando constitution.md. Este documento se ajusta si algo cambia en el spec; el spec no se dobla para acomodar una decisión técnica.
 

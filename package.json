@@ -1,5 +1,5 @@
 {
-  "name": "family-game-app",
+  "name": "gatherplay",
   "private": true,
   "workspaces": [
     "apps/*"

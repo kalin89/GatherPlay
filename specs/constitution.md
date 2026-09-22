@@ -1,4 +1,4 @@
-# Constitution — Family Game App
+# Constitution — GatherPlay
 
 Reglas no negociables del proyecto. Cualquier decisión en spec.md, plan.md o tasks.md debe respetar esto; si algo entra en conflicto, se actualiza este archivo primero, explícitamente, no se ignora en silencio.
 
