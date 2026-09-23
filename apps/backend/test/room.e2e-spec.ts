@@ -174,6 +174,89 @@ describe('RoomGateway (e2e)', () => {
     expect(assigned).toHaveLength(1);
   });
 
+  it('una pantalla se suscribe a la sala sin registrarse como jugador', async () => {
+    const host = connect();
+    const roomCreated = waitFor<RoomState>(host, 'room_state');
+    host.on('connect', () => host.emit('create_room'));
+    const room = await roomCreated;
+
+    const screen = connect();
+    const watched = waitFor<RoomState>(screen, 'room_state');
+    screen.on('connect', () => screen.emit('watch_room', { code: room.code }));
+    const watchedState = await watched;
+
+    expect(watchedState.code).toBe(room.code);
+    expect(watchedState.players).toEqual([]);
+  });
+
+  it('devuelve un error al mirar una sala con un código que no existe', async () => {
+    const screen = connect();
+    const errorPromise = waitFor<{ message: string }>(screen, 'error');
+    screen.on('connect', () => screen.emit('watch_room', { code: 'ZZZZZ' }));
+
+    const error = await errorPromise;
+
+    expect(error.message).toBeTruthy();
+  });
+
+  it('la pantalla recibe el estado actualizado cuando un jugador se une', async () => {
+    const host = connect();
+    const roomCreated = waitFor<RoomState>(host, 'room_state');
+    host.on('connect', () => host.emit('create_room'));
+    const room = await roomCreated;
+
+    const screen = connect();
+    const watched = waitFor<RoomState>(screen, 'room_state');
+    screen.on('connect', () => screen.emit('watch_room', { code: room.code }));
+    await watched;
+
+    const player = connect();
+    const playerJoined = waitFor<RoomState>(player, 'room_state');
+    const screenUpdate = waitFor<RoomState>(screen, 'room_state');
+    player.on('connect', () =>
+      player.emit('join_room', { code: room.code, name: 'Ana' }),
+    );
+    await playerJoined;
+    const screenState = await screenUpdate;
+
+    expect(screenState.players).toHaveLength(1);
+    expect(screenState.players[0].name).toBe('Ana');
+  });
+
+  it('la desconexión de la pantalla no altera la lista de jugadores', async () => {
+    const host = connect();
+    const roomCreated = waitFor<RoomState>(host, 'room_state');
+    host.on('connect', () => host.emit('create_room'));
+    const room = await roomCreated;
+
+    const player = connect();
+    const playerJoined = waitFor<RoomState>(player, 'room_state');
+    player.on('connect', () =>
+      player.emit('join_room', { code: room.code, name: 'Ana' }),
+    );
+    await playerJoined;
+
+    const screen = connect();
+    const watched = waitFor<RoomState>(screen, 'room_state');
+    screen.on('connect', () => screen.emit('watch_room', { code: room.code }));
+    const watchedState = await watched;
+    expect(watchedState.players).toHaveLength(1);
+
+    screen.disconnect();
+
+    // Verifica el estado real de la sala con una segunda pantalla,
+    // en vez de asumir que la desconexión no disparó ningún cambio.
+    const secondScreen = connect();
+    const recheck = waitFor<RoomState>(secondScreen, 'room_state');
+    secondScreen.on('connect', () =>
+      secondScreen.emit('watch_room', { code: room.code }),
+    );
+    const finalState = await recheck;
+
+    expect(finalState.players).toHaveLength(1);
+    expect(finalState.players[0].name).toBe('Ana');
+  });
+
   it('devuelve un error al asignar un jugador a un equipo inexistente', async () => {
     const host = connect();
     const roomCreated = waitFor<RoomState>(host, 'room_state');

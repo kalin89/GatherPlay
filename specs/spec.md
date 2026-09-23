@@ -57,6 +57,16 @@ Criterios del motor de sala (Fase 1 de tasks.md): crear sala, generar código, u
 - **Given** una duración de ronda inválida (cero, negativa o no entera), **when** el host intenta iniciar la ronda, **then** recibe un error y la sala permanece en el estado en que estaba.
 - **Given** una ronda en curso, **when** todos los jugadores de la sala se desconectan, **then** el temporizador se detiene y la sala deja de emitir actualizaciones de tiempo.
 
+### Vista de pantalla (lobby)
+
+- **Given** una sala existente en `lobby`, **when** la pantalla abre `/screen/[roomCode]`, **then** se suscribe a esa sala sin registrarse como jugador y muestra el código de sala y el QR de invitación.
+- **Given** un código de sala que no existe, **when** la pantalla lo abre, **then** muestra un mensaje de sala no encontrada en vez de quedarse esperando indefinidamente.
+- **Given** la pantalla mostrando el lobby, **when** un jugador se une desde su celular, **then** su nombre aparece en la pantalla sin necesidad de recargar.
+- **Given** una sala con equipos creados, **when** la pantalla muestra el lobby, **then** cada equipo aparece con su nombre, su color y sus integrantes.
+- **Given** un jugador conectado que todavía no tiene equipo, **when** la pantalla muestra el lobby, **then** aparece en una lista de "sin equipo" separada de los equipos.
+- **Given** la pantalla mostrando el lobby, **when** un jugador pierde la conexión, **then** desaparece de la lista en la pantalla.
+- **Given** una pantalla suscrita como espectadora, **when** esa pantalla se desconecta, **then** la lista de jugadores de la sala no se altera.
+
 ## Minijuegos
 
 ### 1. Mímica / Caras y Gestos

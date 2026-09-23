@@ -1,3 +1,4 @@
+import { CreateRoomButton } from "@/components/create-room-button";
 import styles from "./page.module.css";
 
 export default function Home() {
@@ -9,9 +10,7 @@ export default function Home() {
           Reuní a todos en la misma pantalla. Cada quien juega desde su
           celular.
         </p>
-        <button type="button" className={styles.createButton}>
-          Crear sala
-        </button>
+        <CreateRoomButton className={styles.createButton} />
       </div>
     </div>
   );
