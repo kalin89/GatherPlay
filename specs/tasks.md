@@ -16,7 +16,7 @@ Backlog inicial, en orden. Cada tarea se implementa y se cierra antes de pasar a
 - [x] Armado de equipos (manual por el host + opción aleatoria).
 - [x] `GameEngineCore`: fases de sala (`lobby` → `jugando` → `resultados`), temporizador genérico, puntaje por equipo.
 - [x] Vista `/screen/[roomCode]` mostrando QR + código + jugadores/equipos en lobby.
-- [ ] Vista `/play/[roomCode]` con formulario de nombre y espera en lobby.
+- [x] Vista `/play/[roomCode]` con formulario de nombre y espera en lobby.
 - [x] Backend: evento `remove_team` para que el host corrija un equipo mal creado (nombre/color) antes de arrancar.
 - [ ] Controles de host en `/screen`: crear/borrar equipos antes de revelar el código, asignar/randomizar jugadores desde la pantalla (host nunca es jugador). Depende de: `specs/features/remove-team/analysis.md`.
 - [ ] E2E: camino feliz de "crear sala → unirse → armar equipos" (sin ningún minijuego todavía).

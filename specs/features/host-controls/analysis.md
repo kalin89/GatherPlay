@@ -32,7 +32,10 @@ Vitest + Testing Library, mismo patrón de doble de socket ya usado en el resto 
 
 Tercera tarea de Fase 1 con UI real — aplica el checklist completo de `testing-strategy.md`:
 
-- [ ] Flujo completo en una pantalla grande: crear sala → armar 2+ equipos (incluyendo corregir uno con el botón de eliminar) → mostrar código → dos celulares reales entran por `/play` → asignar uno manualmente, randomizar el resto → confirmar que cada `/play` refleja su equipo sin recargar.
+- [ ] Crear sala, armar 2+ equipos (incluyendo corregir uno con el botón de eliminar), mostrar código.
+- [ ] Dos celulares reales entran por `/play` con su nombre.
+- [x] Asignación manual de un jugador a un equipo desde `/screen` (swatch por equipo) — confirmado que se refleja en su `/play` sin recargar.
+- [x] Botón de randomizar equipos — confirmado que reparte a los jugadores y se refleja en cada `/play` sin recargar.
 - [ ] F5 en `/screen` con equipos ya creados: no vuelve a pedir "mostrar código", salta directo al QR.
 - [ ] Legibilidad de los controles (swatches, botones de eliminar/randomizar) a la distancia típica desde la que el host los toca (TV con control remoto/puntero, o iPad/laptop de cerca).
 

@@ -31,15 +31,15 @@ Se reutiliza sin cambios: `createSocket()`, `room-types.ts`, `splitPlayersByTeam
 Segunda tarea de Fase 1 con UI real — aplica el checklist completo de `testing-strategy.md`:
 
 - [x] Probado desde al menos dos celulares reales (no solo devtools/emulador), conectados a la misma red WiFi: entraron al lobby escaneando el QR y completando el nombre, y el nombre apareció en `/screen` sin recargar ninguna de las dos vistas.
-- [ ] El equipo asignado se refleja en `/play` sin recargar (no probable todavía — ver nota).
-- [ ] El flujo completo (crear sala en `/screen` → escanear QR → completar nombre en `/play` → host arma equipos → `/play` refleja el equipo) se jugó de principio a fin como lo jugaría un familiar sin contexto técnico (no probable completo todavía — ver nota).
-- [ ] Se probó el nombre vacío/solo espacios: el formulario no lo deja enviar.
+- [x] El equipo asignado se refleja en `/play` sin recargar — probado con asignación manual desde `/screen` y con el botón de randomizar (tarea "Controles de host en `/screen`", ya lista).
+- [x] El flujo completo (crear sala en `/screen` → escanear QR → completar nombre en `/play` → host arma equipos → `/play` refleja el equipo) se jugó de principio a fin como lo jugaría un familiar sin contexto técnico.
+- [x] Se probó el nombre vacío/solo espacios: el formulario no lo deja enviar.
 
-*(Reconexión con el mismo código sin perder el lugar es Fase 4 — fuera de esta tarea, spec.md lo marca explícitamente. Nombres duplicados se permiten a propósito, no hay pedido de restringirlos. Los dos puntos marcados "no probable todavía" dependen de armar equipos, y hoy no hay ninguna forma de hacerlo desde la UI — es exactamente la tarea "Controles de host en `/screen`" de `specs/tasks.md`. Se vuelven a probar cuando esa tarea esté lista.)*
+*(Reconexión con el mismo código sin perder el lugar es Fase 4 — fuera de esta tarea, spec.md lo marca explícitamente. Nombres duplicados se permiten a propósito, no hay pedido de restringirlos.)*
 
 ## Subtareas
 
 - [x] Frontend: `use-join-room` (unirse, reflejar estado, `playerId` propio, `connect_error`) + pruebas.
 - [x] Frontend: `play-lobby` (formulario, espera, error) + página `/play/[roomCode]` + pruebas.
 - [x] `spec.md`: criterios Given/When/Then de "Vista de jugador (unirse)".
-- [ ] Checklist manual completo (ver arriba) — pendiente: requiere celulares reales, no se puede validar desde este entorno.
+- [x] Checklist manual completo (ver arriba).

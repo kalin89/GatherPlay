@@ -31,3 +31,15 @@ explícita, no implícita en el orden de la lista:
 - En el propio `specs/features/<nombre>/analysis.md`: al principio, qué
   tarea(s) previa(s) necesita, con su ruta exacta — mismo patrón que ya usan
   `team-assignment` y `screen-lobby` al mencionar `room-module`.
+
+## Mensaje de cierre al terminar una tarea
+
+Al terminar de implementar una tarea (código + pruebas automatizadas en
+verde), el mensaje final a Kalin dice explícitamente:
+
+1. Que quedó lista (o qué falta, si algo no se pudo cerrar).
+2. El nombre/ruta del `specs/features/<nombre>/analysis.md` correspondiente.
+3. Los puntos de la checklist manual que Kalin todavía tiene que verificar
+   él mismo — si la tarea es de puro backend sin UI conectada (excepción de
+   `testing-strategy.md`), decirlo explícitamente en vez de listar puntos
+   que no aplican.
