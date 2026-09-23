@@ -1,0 +1,22 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.label {
+  font-size: clamp(16px, 2vw, 22px);
+  color: rgba(255, 255, 255, 0.85);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.code {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: clamp(56px, 10vw, 120px);
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: #fff;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+}

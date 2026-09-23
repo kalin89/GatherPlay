@@ -36,6 +36,10 @@ interface RandomizeTeamsPayload {
   code: string;
 }
 
+interface WatchRoomPayload {
+  code: string;
+}
+
 @WebSocketGateway({ cors: { origin: '*' } })
 export class RoomGateway implements OnGatewayDisconnect {
   @WebSocketServer()
@@ -128,6 +132,24 @@ export class RoomGateway implements OnGatewayDisconnect {
       this.server.to(room.code).emit('room_state', room);
     } catch (error) {
       if (error instanceof RoomNotFoundError || error instanceof NoTeamsError) {
+        client.emit('error', { message: error.message });
+        return;
+      }
+      throw error;
+    }
+  }
+
+  @SubscribeMessage('watch_room')
+  handleWatchRoom(
+    @MessageBody() payload: WatchRoomPayload,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const room = this.roomService.getRoomOrThrow(payload.code);
+      void client.join(room.code);
+      client.emit('room_state', room);
+    } catch (error) {
+      if (error instanceof RoomNotFoundError) {
         client.emit('error', { message: error.message });
         return;
       }

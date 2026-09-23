@@ -1,16 +1,15 @@
-// Vista "pantalla" (host/TV) — solo lectura del estado de sala vía WebSocket.
-// Placeholder de Fase 0: aún no conecta al gateway, solo confirma que la ruta existe.
-export default async function ScreenPage({
-  params,
-}: {
-  params: Promise<{ roomCode: string }>;
-}) {
-  const { roomCode } = await params;
+import { ScreenLobby } from "./screen-lobby";
 
-  return (
-    <main>
-      <h1>Pantalla de sala: {roomCode}</h1>
-      <p>Aquí se mostrará el estado del juego en vivo (Fase 1 en adelante).</p>
-    </main>
-  );
+// Vista "pantalla" (host/TV) — solo lectura del estado de sala vía
+// WebSocket. La resolución de `params` queda en el Server Component;
+// toda la conexión en vivo vive en `ScreenLobby` (Client Component).
+export default async function ScreenPage(
+  props: PageProps<"/screen/[roomCode]">,
+) {
+  const { roomCode } = await props.params;
+
+  // `key` fuerza un remount si el usuario navega de una sala a otra sin
+  // recargar la página, así `useRoomState` arranca limpio para el código
+  // nuevo en vez de arrastrar el estado de la sala anterior.
+  return <ScreenLobby key={roomCode} roomCode={roomCode} />;
 }
