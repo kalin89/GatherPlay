@@ -15,6 +15,24 @@
   gap: 12px;
 }
 
+.remove {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  font-size: 18px;
+  line-height: 1;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.remove:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
 .swatch {
   width: 20px;
   height: 20px;

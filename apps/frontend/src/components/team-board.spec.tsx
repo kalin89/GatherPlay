@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { TeamBoard } from "./team-board";
 import type { Team } from "@/lib/room-types";
 
@@ -40,5 +40,20 @@ describe("TeamBoard", () => {
     render(<TeamBoard team={makeTeam()} players={[]} />);
 
     expect(screen.getByText("Sin jugadores todavía")).toBeInTheDocument();
+  });
+
+  it("no muestra botón de eliminar si no se pasa onRemove", () => {
+    render(<TeamBoard team={makeTeam()} players={[]} />);
+
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("muestra el botón de eliminar y lo dispara al hacer click", () => {
+    const onRemove = vi.fn();
+    render(<TeamBoard team={makeTeam()} players={[]} onRemove={onRemove} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /eliminar equipo rojos/i }));
+
+    expect(onRemove).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,0 +1,82 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  width: 100%;
+  max-width: 1100px;
+}
+
+.teams {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+  width: 100%;
+}
+
+.unassigned {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 500px;
+}
+
+.unassignedTitle {
+  font-size: clamp(20px, 2.5vw, 28px);
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.unassignedList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+}
+
+.unassignedRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+}
+
+.playerName {
+  font-size: clamp(16px, 2vw, 20px);
+  font-weight: 600;
+  color: #fff;
+}
+
+.assignSwatches {
+  display: flex;
+  gap: 6px;
+}
+
+.assignSwatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+}
+
+.randomize {
+  padding: 12px 28px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #7c3aed;
+  background: #fff;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.randomize:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

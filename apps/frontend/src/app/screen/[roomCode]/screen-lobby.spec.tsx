@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ScreenLobby } from "./screen-lobby";
 import type { RoomState } from "@/lib/room-types";
 
@@ -79,22 +79,6 @@ describe("ScreenLobby", () => {
     expect(screen.getByText("Conectando con la sala…")).toBeInTheDocument();
   });
 
-  it("pinta el código y los jugadores al recibir room_state", async () => {
-    render(<ScreenLobby roomCode="ABCDE" />);
-    lastSocket?.triggerConnect();
-
-    lastSocket?.triggerRoomState(
-      makeRoom({
-        players: [{ id: "p1", name: "Ana", socketId: "s1" }],
-      }),
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText("ABCDE")).toBeInTheDocument();
-      expect(screen.getByText("Ana")).toBeInTheDocument();
-    });
-  });
-
   it("muestra sala no encontrada al recibir error", async () => {
     render(<ScreenLobby roomCode="ZZZZZ" />);
     lastSocket?.triggerConnect();
@@ -113,5 +97,97 @@ describe("ScreenLobby", () => {
     unmount();
 
     expect(socket?.disconnected).toBe(true);
+  });
+
+  it("sin equipos, el botón de mostrar código está deshabilitado y no hay QR", async () => {
+    render(<ScreenLobby roomCode="ABCDE" />);
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(makeRoom());
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /mostrar código/i }),
+      ).toBeDisabled();
+      expect(screen.queryByText("ABCDE")).not.toBeInTheDocument();
+    });
+  });
+
+  it("con un equipo creado, se habilita mostrar código; al hacer click se revela", async () => {
+    render(<ScreenLobby roomCode="ABCDE" />);
+    lastSocket?.triggerConnect();
+    // El primer room_state llega sin equipos (no dispara el auto-revelado);
+    // el equipo se crea después, ya con la pantalla montada.
+    lastSocket?.triggerRoomState(makeRoom());
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /mostrar código/i }),
+      ).toBeDisabled();
+    });
+
+    lastSocket?.triggerRoomState(
+      makeRoom({
+        teams: [{ id: "t1", name: "Rojos", color: "#ef4444", playerIds: [], score: 0 }],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /mostrar código/i }),
+      ).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /mostrar código/i }));
+
+    expect(screen.getByText("ABCDE")).toBeInTheDocument();
+  });
+
+  it("arranca revelado si el primer room_state ya trae equipos (sobrevive F5)", async () => {
+    render(<ScreenLobby roomCode="ABCDE" />);
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(
+      makeRoom({
+        teams: [{ id: "t1", name: "Rojos", color: "#ef4444", playerIds: [], score: 0 }],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("ABCDE")).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole("button", { name: /mostrar código/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("un error de acción después de tener estado se muestra sin reemplazar la vista", async () => {
+    render(<ScreenLobby roomCode="ABCDE" />);
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(makeRoom());
+    lastSocket?.triggerError({ message: "No existe un equipo con ese id" });
+
+    await waitFor(() => {
+      expect(screen.getByText("No existe un equipo con ese id")).toBeInTheDocument();
+      // La vista de lobby sigue ahí, no se reemplazó por "sala no encontrada".
+      expect(screen.queryByText(/no encontramos la sala/i)).not.toBeInTheDocument();
+      expect(screen.getByPlaceholderText("Nombre del equipo")).toBeInTheDocument();
+    });
+  });
+
+  it("crear un equipo desde el formulario emite create_team", async () => {
+    render(<ScreenLobby roomCode="ABCDE" />);
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(makeRoom());
+
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText("Nombre del equipo")).toBeInTheDocument(),
+    );
+    fireEvent.change(screen.getByPlaceholderText("Nombre del equipo"), {
+      target: { value: "Rojos" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /agregar equipo/i }));
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "create_team",
+      payload: { code: "ABCDE", name: "Rojos", color: expect.any(String) },
+    });
   });
 });

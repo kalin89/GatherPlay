@@ -1,7 +1,13 @@
 import type { TeamWithPlayers } from "@/lib/room-selectors";
 import styles from "./team-board.module.css";
 
-export function TeamBoard({ team, players }: TeamWithPlayers) {
+interface TeamBoardProps extends TeamWithPlayers {
+  /** Si viene, muestra un botón para borrar el equipo (controles de host).
+   * Sin esta prop, la tarjeta es puramente de lectura — igual que antes. */
+  onRemove?: () => void;
+}
+
+export function TeamBoard({ team, players, onRemove }: TeamBoardProps) {
   return (
     <article className={styles.card} style={{ borderColor: team.color }}>
       <header className={styles.header}>
@@ -9,6 +15,16 @@ export function TeamBoard({ team, players }: TeamWithPlayers) {
             está en texto, el color es solo un acento visual. */}
         <span className={styles.swatch} style={{ background: team.color }} />
         <h2 className={styles.name}>{team.name}</h2>
+        {onRemove && (
+          <button
+            type="button"
+            className={styles.remove}
+            onClick={onRemove}
+            aria-label={`Eliminar equipo ${team.name}`}
+          >
+            ×
+          </button>
+        )}
       </header>
       {players.length === 0 ? (
         <p className={styles.empty}>Sin jugadores todavía</p>

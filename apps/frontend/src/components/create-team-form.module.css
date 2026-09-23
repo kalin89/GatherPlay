@@ -1,0 +1,51 @@
+.form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+}
+
+.input {
+  flex: 1 1 180px;
+  padding: 10px 16px;
+  font-size: 16px;
+  border: none;
+  border-radius: 10px;
+  color: #171717;
+}
+
+.swatches {
+  display: flex;
+  gap: 8px;
+}
+
+.swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  cursor: pointer;
+}
+
+.swatch[data-selected="true"] {
+  border-color: #fff;
+}
+
+.submit {
+  padding: 10px 20px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #7c3aed;
+  background: #fff;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
