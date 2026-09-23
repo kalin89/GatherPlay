@@ -171,5 +171,44 @@ describe('RoomService', () => {
 
       expect(() => service.randomizeTeams(room.code)).toThrow(NoTeamsError);
     });
+
+    it('elimina un equipo sin jugadores', () => {
+      const room = service.createRoom();
+      const withTeam = service.createTeam(room.code, 'Rojos', '#FF0000');
+      const teamId = withTeam.teams[0].id;
+
+      const updated = service.removeTeam(room.code, teamId);
+
+      expect(updated.teams).toEqual([]);
+    });
+
+    it('elimina un equipo con jugadores y los deja sin equipo (siguen en la sala)', () => {
+      const room = service.createRoom();
+      const withPlayer = service.joinRoom(room.code, 'Ana', 'socket-1');
+      const playerId = withPlayer.players[0].id;
+      const withTeam = service.createTeam(room.code, 'Rojos', '#FF0000');
+      const teamId = withTeam.teams[0].id;
+      service.assignPlayerToTeam(room.code, playerId, teamId);
+
+      const updated = service.removeTeam(room.code, teamId);
+
+      expect(updated.teams).toEqual([]);
+      expect(updated.players).toHaveLength(1);
+      expect(updated.players[0].id).toBe(playerId);
+    });
+
+    it('lanza TeamNotFoundError al eliminar un equipo inexistente', () => {
+      const room = service.createRoom();
+
+      expect(() => service.removeTeam(room.code, 'inexistente')).toThrow(
+        TeamNotFoundError,
+      );
+    });
+
+    it('lanza RoomNotFoundError al eliminar un equipo en una sala inexistente', () => {
+      expect(() => service.removeTeam('ZZZZZ', 'inexistente')).toThrow(
+        RoomNotFoundError,
+      );
+    });
   });
 });

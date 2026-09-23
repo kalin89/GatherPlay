@@ -36,6 +36,11 @@ interface RandomizeTeamsPayload {
   code: string;
 }
 
+interface RemoveTeamPayload {
+  code: string;
+  teamId: string;
+}
+
 interface WatchRoomPayload {
   code: string;
 }
@@ -115,6 +120,23 @@ export class RoomGateway implements OnGatewayDisconnect {
         error instanceof PlayerNotFoundError ||
         error instanceof TeamNotFoundError
       ) {
+        client.emit('error', { message: error.message });
+        return;
+      }
+      throw error;
+    }
+  }
+
+  @SubscribeMessage('remove_team')
+  handleRemoveTeam(
+    @MessageBody() payload: RemoveTeamPayload,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const room = this.roomService.removeTeam(payload.code, payload.teamId);
+      this.server.to(room.code).emit('room_state', room);
+    } catch (error) {
+      if (error instanceof RoomNotFoundError || error instanceof TeamNotFoundError) {
         client.emit('error', { message: error.message });
         return;
       }

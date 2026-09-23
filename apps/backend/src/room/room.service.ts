@@ -113,6 +113,16 @@ export class RoomService {
     return room;
   }
 
+  removeTeam(code: string, teamId: string): RoomState {
+    const room = this.getRoomOrThrow(code);
+    const index = room.teams.findIndex((t) => t.id === teamId);
+    if (index === -1) {
+      throw new TeamNotFoundError(teamId);
+    }
+    room.teams.splice(index, 1);
+    return room;
+  }
+
   randomizeTeams(code: string): RoomState {
     const room = this.getRoomOrThrow(code);
     if (room.teams.length === 0) {

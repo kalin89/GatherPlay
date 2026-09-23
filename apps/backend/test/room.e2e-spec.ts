@@ -281,4 +281,86 @@ describe('RoomGateway (e2e)', () => {
     const error = await errorPromise;
     expect(error.message).toBeTruthy();
   });
+
+  it('el host elimina un equipo y todos los clientes ven el estado actualizado', async () => {
+    const host = connect();
+    const roomCreated = waitFor<RoomState>(host, 'room_state');
+    host.on('connect', () => host.emit('create_room'));
+    const room = await roomCreated;
+
+    const teamCreated = waitFor<RoomState>(host, 'room_state');
+    host.emit('create_team', {
+      code: room.code,
+      name: 'Rojos',
+      color: '#FF0000',
+    });
+    const withTeam = await teamCreated;
+    const teamId = withTeam.teams[0].id;
+
+    const screen = connect();
+    const watched = waitFor<RoomState>(screen, 'room_state');
+    screen.on('connect', () => screen.emit('watch_room', { code: room.code }));
+    await watched;
+
+    const hostSeesRemoval = waitFor<RoomState>(host, 'room_state');
+    const screenSeesRemoval = waitFor<RoomState>(screen, 'room_state');
+    host.emit('remove_team', { code: room.code, teamId });
+
+    const [hostState, screenState] = await Promise.all([
+      hostSeesRemoval,
+      screenSeesRemoval,
+    ]);
+
+    expect(hostState.teams).toEqual([]);
+    expect(screenState.teams).toEqual([]);
+  });
+
+  it('un jugador asignado a un equipo eliminado queda sin equipo', async () => {
+    const host = connect();
+    const roomCreated = waitFor<RoomState>(host, 'room_state');
+    host.on('connect', () => host.emit('create_room'));
+    const room = await roomCreated;
+
+    const player = connect();
+    const playerJoined = waitFor<RoomState>(player, 'room_state');
+    player.on('connect', () =>
+      player.emit('join_room', { code: room.code, name: 'Ana' }),
+    );
+    const joined = await playerJoined;
+    const playerId = joined.players[0].id;
+
+    const teamCreated = waitFor<RoomState>(host, 'room_state');
+    host.emit('create_team', {
+      code: room.code,
+      name: 'Rojos',
+      color: '#FF0000',
+    });
+    const withTeam = await teamCreated;
+    const teamId = withTeam.teams[0].id;
+
+    const assigned = waitFor<RoomState>(host, 'room_state');
+    host.emit('assign_team', { code: room.code, playerId, teamId });
+    await assigned;
+
+    const removed = waitFor<RoomState>(host, 'room_state');
+    host.emit('remove_team', { code: room.code, teamId });
+    const finalState = await removed;
+
+    expect(finalState.teams).toEqual([]);
+    expect(finalState.players).toHaveLength(1);
+    expect(finalState.players[0].id).toBe(playerId);
+  });
+
+  it('devuelve un error al eliminar un equipo inexistente', async () => {
+    const host = connect();
+    const roomCreated = waitFor<RoomState>(host, 'room_state');
+    host.on('connect', () => host.emit('create_room'));
+    const room = await roomCreated;
+
+    const errorPromise = waitFor<{ message: string }>(host, 'error');
+    host.emit('remove_team', { code: room.code, teamId: 'inexistente' });
+
+    const error = await errorPromise;
+    expect(error.message).toBeTruthy();
+  });
 });
