@@ -4,5 +4,8 @@ node_modules/
 .env.local
 dist/
 .next/
+.next-e2e/
 coverage/
 *.tsbuildinfo
+test-results/
+playwright-report/
