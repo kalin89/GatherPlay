@@ -85,6 +85,27 @@ La pantalla compartida (TV/iPad/computadora) es también el panel del host — e
 - **Given** el jugador ya unido esperando en el lobby, **when** el host lo asigna a un equipo, **then** la vista refleja el equipo (nombre y color) sin necesidad de recargar.
 - **Given** el jugador ya unido esperando en el lobby, **when** cierra la pestaña o se corta el WebSocket, **then** se remueve de la sala (mismo comportamiento ya cubierto por "Motor de sala" — aplica también a esta vista).
 
+## Contenido de IA — Trivia
+
+`AiContentModule.getTriviaQuestions(categoria)` genera las preguntas de Trivia (ver
+"Minijuegos" → "4. Trivia / Preguntados") antes de que arranque la ronda, nunca durante el
+temporizador (constitution.md, principio 5).
+
+- **Given** una categoría válida, **when** se piden N preguntas, **then** se devuelven N
+  preguntas, cada una con 4 opciones distintas y exactamente una correcta, sin preguntas
+  repetidas en el lote.
+- **Given** una categoría válida, **when** se generan las preguntas, **then** la posición
+  de la opción correcta varía entre preguntas (se baraja en el servidor, no la elige la IA).
+- **Given** la IA falla, tarda más que el timeout, rechaza el pedido o devuelve contenido
+  inválido, **when** se piden preguntas, **then** se devuelven N preguntas del banco de
+  respaldo de esa categoría, sin error hacia quien llama.
+- **Given** no hay credencial de IA configurada, **when** se piden preguntas, **then** se
+  usa el banco de respaldo directamente, sin intentar llamar a la IA.
+- **Given** una categoría que no existe, **when** se piden preguntas, **then** se recibe un
+  error y no se llama a la IA.
+- **Given** una cantidad inválida (menor a 1, mayor a 20, o no entera), **when** se piden
+  preguntas, **then** se recibe un error y no se llama a la IA.
+
 ## Minijuegos
 
 ### 1. Mímica / Caras y Gestos

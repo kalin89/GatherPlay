@@ -6,6 +6,23 @@ Los commits y los `git push` los hace Kalin, no Claude — salvo que se lo pida 
 
 Cuando el trabajo esté listo, Claude deja los cambios en el working tree (o los deja staged si aplica) y muestra qué cambió — pero no corre `git commit` ni `git push` a menos que la instrucción lo diga explícitamente ("commitea esto", "haz push", etc.).
 
+## Plan antes de código
+
+Nunca se escribe código (ni se edita ni se crea un archivo de código) sin que
+antes exista un plan aprobado por Kalin para esa tarea. El flujo es siempre:
+
+1. Investigar lo necesario (leer código, specs, hacer preguntas si algo no
+   queda claro).
+2. Escribir el plan (entrar en modo plan) y presentarlo para aprobación.
+3. Recién después de que Kalin lo aprueba, se empieza a escribir código,
+   siguiendo ese plan.
+
+Esto aplica a cualquier tarea que implique escribir o modificar código,
+sea grande o chica — no solo a las que ya disparan la regla de "Tamaño de
+las tareas" de abajo. Un cambio de una línea evidente (typo, ajuste trivial
+que el propio Kalin describió con precisión exacta) no necesita este paso;
+ante la duda, se hace el plan.
+
 ## Tamaño de las tareas
 
 Antes de implementar una tarea de `specs/tasks.md`: si el plan requiere tocar

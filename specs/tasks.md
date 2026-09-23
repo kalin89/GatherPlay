@@ -18,14 +18,14 @@ Backlog inicial, en orden. Cada tarea se implementa y se cierra antes de pasar a
 - [x] Vista `/screen/[roomCode]` mostrando QR + código + jugadores/equipos en lobby.
 - [x] Vista `/play/[roomCode]` con formulario de nombre y espera en lobby.
 - [x] Backend: evento `remove_team` para que el host corrija un equipo mal creado (nombre/color) antes de arrancar.
-- [ ] Controles de host en `/screen`: crear/borrar equipos antes de revelar el código, asignar/randomizar jugadores desde la pantalla (host nunca es jugador). Depende de: `specs/features/remove-team/analysis.md`.
-- [ ] E2E: camino feliz de "crear sala → unirse → armar equipos" (sin ningún minijuego todavía).
+- [x] Controles de host en `/screen`: crear/borrar equipos antes de revelar el código, asignar/randomizar jugadores desde la pantalla (host nunca es jugador). Depende de: `specs/features/remove-team/analysis.md`.
+- [x] E2E: camino feliz de "crear sala → unirse → armar equipos" (sin ningún minijuego todavía).
 
 ## Fase 2 — Un minijuego de referencia (Trivia)
 
 Se implementa Trivia primero porque es el más simple de validar (no depende de audio ni dibujo), y sirve de plantilla para los demás módulos de juego.
 
-- [ ] `AiContentModule.getTriviaQuestions(categoria)`.
+- [x] `AiContentModule.getTriviaQuestions(categoria)`.
 - [ ] `TriviaModule` (backend): reparte pregunta, recibe respuestas, calcula puntaje con bono por rapidez.
 - [ ] Componentes de pantalla y control para Trivia.
 - [ ] Pruebas unitarias de las reglas + e2e del camino feliz y del caso "nadie responde a tiempo".
@@ -48,6 +48,7 @@ Cada una de estas ocho tareas incluye: módulo backend, componentes de pantalla/
 - [ ] Selector de "siguiente juego" entre ronda y ronda, sin tener que recrear la sala.
 - [ ] Marcador acumulado visible entre minijuegos.
 - [ ] Manejo de reconexión (un jugador pierde señal y vuelve a entrar con el mismo código sin perder su lugar en el equipo).
+- [ ] Persistir preguntas generadas por IA en `content_banks` (Postgres) para reusarlas y como respaldo creciente. Depende de: `specs/features/ai-content-trivia/analysis.md`.
 
 ## Explícitamente no en el backlog de v1
 

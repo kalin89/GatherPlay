@@ -4,9 +4,10 @@ import { AppService } from './app.service.js';
 import { AppGateway } from './websocket/app.gateway.js';
 import { RoomModule } from './room/room.module.js';
 import { GameEngineModule } from './game-engine/game-engine.module.js';
+import { AiContentModule } from './ai-content/ai-content.module.js';
 
 @Module({
-  imports: [RoomModule, GameEngineModule],
+  imports: [RoomModule, GameEngineModule, AiContentModule],
   controllers: [AppController],
   providers: [AppService, AppGateway],
 })

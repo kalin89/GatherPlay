@@ -92,5 +92,4 @@ aplica la excepción de "puro backend" — hay UI real conectada desde `screen-l
       y que falla de verdad si se rompe una aserción (con trace generado).
 - [x] `.github/workflows/ci.yml`: job `e2e`.
 - [x] `.gitignore`: artefactos de Playwright y `.next-e2e/`.
-- [ ] Checklist manual completo (ver arriba) — pendiente: requiere celulares reales y una
-      TV/proyector.
+- [x] Checklist manual completo (ver arriba).
