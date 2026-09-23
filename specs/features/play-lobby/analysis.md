@@ -30,12 +30,12 @@ Se reutiliza sin cambios: `createSocket()`, `room-types.ts`, `splitPlayersByTeam
 
 Segunda tarea de Fase 1 con UI real — aplica el checklist completo de `testing-strategy.md`:
 
-- [ ] Probado desde al menos dos celulares reales (no solo devtools/emulador), conectados a la misma red WiFi, completando el formulario de nombre.
-- [ ] Probado en conjunto con `/screen` en una pantalla grande: el nombre y el equipo aparecen en ambas vistas sin recargar ninguna.
-- [ ] El flujo completo (crear sala en `/screen` → escanear QR → completar nombre en `/play` → host arma equipos → `/play` refleja el equipo) se jugó de principio a fin como lo jugaría un familiar sin contexto técnico.
+- [x] Probado desde al menos dos celulares reales (no solo devtools/emulador), conectados a la misma red WiFi: entraron al lobby escaneando el QR y completando el nombre, y el nombre apareció en `/screen` sin recargar ninguna de las dos vistas.
+- [ ] El equipo asignado se refleja en `/play` sin recargar (no probable todavía — ver nota).
+- [ ] El flujo completo (crear sala en `/screen` → escanear QR → completar nombre en `/play` → host arma equipos → `/play` refleja el equipo) se jugó de principio a fin como lo jugaría un familiar sin contexto técnico (no probable completo todavía — ver nota).
 - [ ] Se probó el nombre vacío/solo espacios: el formulario no lo deja enviar.
 
-*(Reconexión con el mismo código sin perder el lugar es Fase 4 — fuera de esta tarea, spec.md lo marca explícitamente. Nombres duplicados se permiten a propósito, no hay pedido de restringirlos.)*
+*(Reconexión con el mismo código sin perder el lugar es Fase 4 — fuera de esta tarea, spec.md lo marca explícitamente. Nombres duplicados se permiten a propósito, no hay pedido de restringirlos. Los dos puntos marcados "no probable todavía" dependen de armar equipos, y hoy no hay ninguna forma de hacerlo desde la UI — es exactamente la tarea "Controles de host en `/screen`" de `specs/tasks.md`. Se vuelven a probar cuando esa tarea esté lista.)*
 
 ## Subtareas
 

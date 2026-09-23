@@ -18,7 +18,7 @@ Backlog inicial, en orden. Cada tarea se implementa y se cierra antes de pasar a
 - [x] Vista `/screen/[roomCode]` mostrando QR + código + jugadores/equipos en lobby.
 - [ ] Vista `/play/[roomCode]` con formulario de nombre y espera en lobby.
 - [ ] Backend: evento `remove_team` para que el host corrija un equipo mal creado (nombre/color) antes de arrancar.
-- [ ] Controles de host en `/screen`: crear/borrar equipos antes de revelar el código, asignar/randomizar jugadores desde la pantalla (host nunca es jugador).
+- [ ] Controles de host en `/screen`: crear/borrar equipos antes de revelar el código, asignar/randomizar jugadores desde la pantalla (host nunca es jugador). Depende de: `specs/features/remove-team/analysis.md`.
 - [ ] E2E: camino feliz de "crear sala → unirse → armar equipos" (sin ningún minijuego todavía).
 
 ## Fase 2 — Un minijuego de referencia (Trivia)

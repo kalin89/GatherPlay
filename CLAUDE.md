@@ -18,3 +18,16 @@ partes no implica trabajo real (ej. el backend ya expone lo necesario).
 
 Esto aplica solo hacia adelante: no se reescriben tareas ya cerradas de
 `tasks.md` para acomodarlas a esta regla.
+
+### Dependencias entre sub-tareas
+
+Cuando una tarea grande queda dividida en varias más chicas (por la regla de
+arriba o por cualquier otra razón), la dependencia entre ellas se deja
+explícita, no implícita en el orden de la lista:
+
+- En `specs/tasks.md`: la línea de la sub-tarea que depende de otra lo dice,
+  mencionando la ruta de su `analysis.md` (ej. "Depende de:
+  `specs/features/remove-team/analysis.md`").
+- En el propio `specs/features/<nombre>/analysis.md`: al principio, qué
+  tarea(s) previa(s) necesita, con su ruta exacta — mismo patrón que ya usan
+  `team-assignment` y `screen-lobby` al mencionar `room-module`.
