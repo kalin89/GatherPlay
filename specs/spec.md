@@ -35,6 +35,14 @@ Criterios del "RoomModule" (Fase 1 de tasks.md): crear sala, generar código, un
 - **Given** dos jugadores uniéndose a la misma sala al mismo tiempo, **when** ambos envían su solicitud de unión, **then** ambos quedan registrados sin pisarse entre sí (sin condición de carrera que pierda a uno de los dos).
 - **Given** un jugador conectado a una sala, **when** pierde la conexión (cierra la pestaña o se corta el WebSocket), **then** se remueve de la lista de jugadores y el resto de los clientes ven la lista actualizada. (Reconexión con el mismo código sin perder el lugar es Fase 4 — fuera de esta tarea.)
 
+### Armado de equipos
+
+- **Given** una sala en `lobby`, **when** el host crea un equipo con nombre y color, **then** el equipo se agrega a la sala sin jugadores y todos los clientes conectados reciben el estado actualizado.
+- **Given** un jugador sin equipo asignado, **when** el host lo asigna manualmente a un equipo existente, **then** el jugador queda en ese equipo (y se quita de cualquier equipo anterior) y todos los clientes reciben el estado actualizado.
+- **Given** una sala con equipos creados y jugadores conectados, **when** el host pide armar los equipos al azar, **then** todos los jugadores quedan redistribuidos entre los equipos existentes de la forma más pareja posible.
+- **Given** una sala sin ningún equipo creado, **when** el host pide armar los equipos al azar, **then** recibe un error y no se modifica el estado.
+- **Given** un id de jugador o de equipo que no existe en la sala, **when** el host intenta asignarlo, **then** recibe un error y no se modifica el estado.
+
 ## Minijuegos
 
 ### 1. Mímica / Caras y Gestos

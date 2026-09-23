@@ -7,11 +7,33 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { RoomNotFoundError, RoomService } from './room.service.js';
+import {
+  NoTeamsError,
+  PlayerNotFoundError,
+  RoomNotFoundError,
+  RoomService,
+  TeamNotFoundError,
+} from './room.service.js';
 
 interface JoinRoomPayload {
   code: string;
   name: string;
+}
+
+interface CreateTeamPayload {
+  code: string;
+  name: string;
+  color: string;
+}
+
+interface AssignTeamPayload {
+  code: string;
+  playerId: string;
+  teamId: string;
+}
+
+interface RandomizeTeamsPayload {
+  code: string;
 }
 
 @WebSocketGateway({ cors: { origin: '*' } })
@@ -43,6 +65,69 @@ export class RoomGateway implements OnGatewayDisconnect {
       this.server.to(room.code).emit('room_state', room);
     } catch (error) {
       if (error instanceof RoomNotFoundError) {
+        client.emit('error', { message: error.message });
+        return;
+      }
+      throw error;
+    }
+  }
+
+  @SubscribeMessage('create_team')
+  handleCreateTeam(
+    @MessageBody() payload: CreateTeamPayload,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const room = this.roomService.createTeam(
+        payload.code,
+        payload.name,
+        payload.color,
+      );
+      this.server.to(room.code).emit('room_state', room);
+    } catch (error) {
+      if (error instanceof RoomNotFoundError) {
+        client.emit('error', { message: error.message });
+        return;
+      }
+      throw error;
+    }
+  }
+
+  @SubscribeMessage('assign_team')
+  handleAssignTeam(
+    @MessageBody() payload: AssignTeamPayload,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const room = this.roomService.assignPlayerToTeam(
+        payload.code,
+        payload.playerId,
+        payload.teamId,
+      );
+      this.server.to(room.code).emit('room_state', room);
+    } catch (error) {
+      if (
+        error instanceof RoomNotFoundError ||
+        error instanceof PlayerNotFoundError ||
+        error instanceof TeamNotFoundError
+      ) {
+        client.emit('error', { message: error.message });
+        return;
+      }
+      throw error;
+    }
+  }
+
+  @SubscribeMessage('randomize_teams')
+  handleRandomizeTeams(
+    @MessageBody() payload: RandomizeTeamsPayload,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const room = this.roomService.randomizeTeams(payload.code);
+      this.server.to(room.code).emit('room_state', room);
+    } catch (error) {
+      if (error instanceof RoomNotFoundError || error instanceof NoTeamsError) {
         client.emit('error', { message: error.message });
         return;
       }

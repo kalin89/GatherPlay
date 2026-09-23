@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type { Player, RoomState } from './room.types.js';
+import type { Player, RoomState, Team } from './room.types.js';
 
 // Sin 0/O ni 1/I — se leen y se dictan en voz alta entre celular y pantalla.
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -13,13 +13,34 @@ export class RoomNotFoundError extends Error {
   }
 }
 
+export class PlayerNotFoundError extends Error {
+  constructor(playerId: string) {
+    super(`No existe un jugador con el id ${playerId}`);
+    this.name = 'PlayerNotFoundError';
+  }
+}
+
+export class TeamNotFoundError extends Error {
+  constructor(teamId: string) {
+    super(`No existe un equipo con el id ${teamId}`);
+    this.name = 'TeamNotFoundError';
+  }
+}
+
+export class NoTeamsError extends Error {
+  constructor(code: string) {
+    super(`La sala ${code} no tiene equipos creados`);
+    this.name = 'NoTeamsError';
+  }
+}
+
 @Injectable()
 export class RoomService {
   private readonly rooms = new Map<string, RoomState>();
 
   createRoom(): RoomState {
     const code = this.generateUniqueCode();
-    const room: RoomState = { code, status: 'lobby', players: [] };
+    const room: RoomState = { code, status: 'lobby', players: [], teams: [] };
     this.rooms.set(code, room);
     return room;
   }
@@ -47,6 +68,65 @@ export class RoomService {
 
   getRoom(code: string): RoomState | undefined {
     return this.rooms.get(code);
+  }
+
+  createTeam(code: string, name: string, color: string): RoomState {
+    const room = this.getRoomOrThrow(code);
+    const team: Team = { id: randomUUID(), name, color, playerIds: [] };
+    room.teams.push(team);
+    return room;
+  }
+
+  assignPlayerToTeam(
+    code: string,
+    playerId: string,
+    teamId: string,
+  ): RoomState {
+    const room = this.getRoomOrThrow(code);
+    const player = room.players.find((p) => p.id === playerId);
+    if (!player) {
+      throw new PlayerNotFoundError(playerId);
+    }
+    const team = room.teams.find((t) => t.id === teamId);
+    if (!team) {
+      throw new TeamNotFoundError(teamId);
+    }
+    for (const other of room.teams) {
+      const index = other.playerIds.indexOf(playerId);
+      if (index !== -1) {
+        other.playerIds.splice(index, 1);
+      }
+    }
+    team.playerIds.push(playerId);
+    return room;
+  }
+
+  randomizeTeams(code: string): RoomState {
+    const room = this.getRoomOrThrow(code);
+    if (room.teams.length === 0) {
+      throw new NoTeamsError(code);
+    }
+    for (const team of room.teams) {
+      team.playerIds = [];
+    }
+    const shuffled = [...room.players];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    shuffled.forEach((player, index) => {
+      const team = room.teams[index % room.teams.length];
+      team.playerIds.push(player.id);
+    });
+    return room;
+  }
+
+  private getRoomOrThrow(code: string): RoomState {
+    const room = this.rooms.get(code);
+    if (!room) {
+      throw new RoomNotFoundError(code);
+    }
+    return room;
   }
 
   private generateUniqueCode(): string {

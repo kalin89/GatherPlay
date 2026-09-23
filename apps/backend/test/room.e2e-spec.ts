@@ -107,4 +107,95 @@ describe('RoomGateway (e2e)', () => {
     const hostState = await hostSeesDisconnect;
     expect(hostState.players).toEqual([]);
   });
+
+  it('el host crea equipos y asigna jugadores manualmente', async () => {
+    const host = connect();
+    const roomCreated = waitFor<RoomState>(host, 'room_state');
+    host.on('connect', () => host.emit('create_room'));
+    const room = await roomCreated;
+
+    const player = connect();
+    const playerJoined = waitFor<RoomState>(player, 'room_state');
+    player.on('connect', () =>
+      player.emit('join_room', { code: room.code, name: 'Ana' }),
+    );
+    const joined = await playerJoined;
+    const playerId = joined.players[0].id;
+
+    const teamCreated = waitFor<RoomState>(host, 'room_state');
+    host.emit('create_team', {
+      code: room.code,
+      name: 'Rojos',
+      color: '#FF0000',
+    });
+    const withTeam = await teamCreated;
+    const teamId = withTeam.teams[0].id;
+
+    const teamAssigned = waitFor<RoomState>(host, 'room_state');
+    host.emit('assign_team', { code: room.code, playerId, teamId });
+    const assigned = await teamAssigned;
+
+    expect(assigned.teams[0].playerIds).toEqual([playerId]);
+  });
+
+  it('el host arma los equipos al azar y todos quedan asignados', async () => {
+    const host = connect();
+    const roomCreated = waitFor<RoomState>(host, 'room_state');
+    host.on('connect', () => host.emit('create_room'));
+    const room = await roomCreated;
+
+    const player = connect();
+    const playerJoined = waitFor<RoomState>(player, 'room_state');
+    player.on('connect', () =>
+      player.emit('join_room', { code: room.code, name: 'Ana' }),
+    );
+    await playerJoined;
+
+    const teamsCreated = waitFor<RoomState>(host, 'room_state');
+    host.emit('create_team', {
+      code: room.code,
+      name: 'Rojos',
+      color: '#FF0000',
+    });
+    await teamsCreated;
+    const secondTeamCreated = waitFor<RoomState>(host, 'room_state');
+    host.emit('create_team', {
+      code: room.code,
+      name: 'Azules',
+      color: '#0000FF',
+    });
+    await secondTeamCreated;
+
+    const randomized = waitFor<RoomState>(host, 'room_state');
+    host.emit('randomize_teams', { code: room.code });
+    const result = await randomized;
+
+    const assigned = result.teams.flatMap((t) => t.playerIds);
+    expect(assigned).toHaveLength(1);
+  });
+
+  it('devuelve un error al asignar un jugador a un equipo inexistente', async () => {
+    const host = connect();
+    const roomCreated = waitFor<RoomState>(host, 'room_state');
+    host.on('connect', () => host.emit('create_room'));
+    const room = await roomCreated;
+
+    const player = connect();
+    const playerJoined = waitFor<RoomState>(player, 'room_state');
+    player.on('connect', () =>
+      player.emit('join_room', { code: room.code, name: 'Ana' }),
+    );
+    const joined = await playerJoined;
+    const playerId = joined.players[0].id;
+
+    const errorPromise = waitFor<{ message: string }>(host, 'error');
+    host.emit('assign_team', {
+      code: room.code,
+      playerId,
+      teamId: 'inexistente',
+    });
+
+    const error = await errorPromise;
+    expect(error.message).toBeTruthy();
+  });
 });
