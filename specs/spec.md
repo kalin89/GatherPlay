@@ -10,13 +10,14 @@ Familias y grupos de amigos reunidos presencialmente, sin perfil técnico. Debe 
 
 ## Flujo general
 
-1. El host abre la app en la pantalla compartida y crea una partida → se genera un código/QR.
-2. EL host crea el nombre de cada equipo y elije color del equipo.
-3. Los jugadores escanean el QR o entran el código desde su celular y ponen su nombre. Sin registro.
-4. El host arma los equipos (o deja que la app los arme al azar).
-5. El host elige el minijuego a jugar (de la lista disponible) y arranca la ronda.
-6. La pantalla compartida muestra el estado del juego (pregunta, tablero, tiempo, turno); cada celular muestra los controles propios de ese juego (botón de respuesta, lienzo para dibujar, botón de "ya dije la palabra", etc.).
-7. Al terminar la ronda se muestran resultados/puntaje y se puede elegir el siguiente juego.
+1. El host abre la app en la pantalla compartida y crea una partida.
+2. El host crea el nombre de cada equipo y elije color del equipo, todavía sin mostrar nada a los jugadores.
+3. Con al menos un equipo creado, el host revela el código/QR.
+4. Los jugadores escanean el QR o entran el código desde su celular y ponen su nombre. Sin registro.
+5. El host asigna cada jugador a un equipo (o deja que la app los arme al azar) — puede seguir ajustando equipos en cualquier momento del lobby.
+6. El host elige el minijuego a jugar (de la lista disponible) y arranca la ronda.
+7. La pantalla compartida muestra el estado del juego (pregunta, tablero, tiempo, turno); cada celular muestra los controles propios de ese juego (botón de respuesta, lienzo para dibujar, botón de "ya dije la palabra", etc.).
+8. Al terminar la ronda se muestran resultados/puntaje y se puede elegir el siguiente juego.
 
 ## Modelo funcional de sala
 
@@ -42,6 +43,8 @@ Criterios del motor de sala (Fase 1 de tasks.md): crear sala, generar código, u
 - **Given** una sala con equipos creados y jugadores conectados, **when** el host pide armar los equipos al azar, **then** todos los jugadores quedan redistribuidos entre los equipos existentes de la forma más pareja posible.
 - **Given** una sala sin ningún equipo creado, **when** el host pide armar los equipos al azar, **then** recibe un error y no se modifica el estado.
 - **Given** un id de jugador o de equipo que no existe en la sala, **when** el host intenta asignarlo, **then** recibe un error y no se modifica el estado.
+- **Given** un equipo existente (con o sin jugadores), **when** el host lo elimina, **then** el equipo desaparece de la sala y los jugadores que estaban en él quedan sin equipo asignado, sin dejar de ser jugadores de la sala.
+- **Given** un id de equipo que no existe, **when** el host intenta eliminarlo, **then** recibe un error y no se modifica el estado.
 
 ### Fases, temporizador y puntaje
 
@@ -57,15 +60,30 @@ Criterios del motor de sala (Fase 1 de tasks.md): crear sala, generar código, u
 - **Given** una duración de ronda inválida (cero, negativa o no entera), **when** el host intenta iniciar la ronda, **then** recibe un error y la sala permanece en el estado en que estaba.
 - **Given** una ronda en curso, **when** todos los jugadores de la sala se desconectan, **then** el temporizador se detiene y la sala deja de emitir actualizaciones de tiempo.
 
-### Vista de pantalla (lobby)
+### Vista de pantalla (lobby y controles de host)
 
-- **Given** una sala existente en `lobby`, **when** la pantalla abre `/screen/[roomCode]`, **then** se suscribe a esa sala sin registrarse como jugador y muestra el código de sala y el QR de invitación.
+La pantalla compartida (TV/iPad/computadora) es también el panel del host — el host nunca es un jugador, no entra por `/play`. Antes de invitar a nadie, arma los equipos desde acá mismo; recién entonces revela el código/QR.
+
+- **Given** una sala recién creada sin equipos, **when** la pantalla abre `/screen/[roomCode]`, **then** se suscribe a esa sala sin registrarse como jugador y muestra el armado de equipos, sin revelar todavía el código ni el QR.
 - **Given** un código de sala que no existe, **when** la pantalla lo abre, **then** muestra un mensaje de sala no encontrada en vez de quedarse esperando indefinidamente.
+- **Given** la pantalla en el armado de equipos, **when** el host crea un equipo con nombre y color, **then** aparece en la lista y la opción de "mostrar código" queda disponible.
+- **Given** ningún equipo creado todavía, **when** el host intenta mostrar el código, **then** no puede — esa opción permanece deshabilitada hasta que exista al menos un equipo.
+- **Given** al menos un equipo creado, **when** el host elige mostrar el código, **then** la pantalla revela el código de sala y el QR de invitación, y esto no vuelve a ocultarse en esa sesión de pantalla.
+- **Given** el código ya revelado, **when** el host crea, elimina o reasigna equipos, **then** puede seguir haciéndolo con la pantalla mostrando el código y el lobby al mismo tiempo.
 - **Given** la pantalla mostrando el lobby, **when** un jugador se une desde su celular, **then** su nombre aparece en la pantalla sin necesidad de recargar.
 - **Given** una sala con equipos creados, **when** la pantalla muestra el lobby, **then** cada equipo aparece con su nombre, su color y sus integrantes.
-- **Given** un jugador conectado que todavía no tiene equipo, **when** la pantalla muestra el lobby, **then** aparece en una lista de "sin equipo" separada de los equipos.
+- **Given** un jugador conectado que todavía no tiene equipo, **when** la pantalla muestra el lobby, **then** aparece en una lista de "sin equipo" separada de los equipos, con una forma de asignarlo manualmente a un equipo desde la pantalla.
+- **Given** jugadores conectados y equipos creados, **when** el host pide randomizar desde la pantalla, **then** todos los jugadores quedan redistribuidos parejo entre los equipos (mismo comportamiento de "Armado de equipos", ahora disparado desde esta vista).
 - **Given** la pantalla mostrando el lobby, **when** un jugador pierde la conexión, **then** desaparece de la lista en la pantalla.
 - **Given** una pantalla suscrita como espectadora, **when** esa pantalla se desconecta, **then** la lista de jugadores de la sala no se altera.
+
+### Vista de jugador (unirse)
+
+- **Given** un código de sala válido en `lobby`, **when** el jugador completa el formulario de nombre en `/play/[roomCode]` y lo envía, **then** se une a la sala y la vista pasa a la pantalla de espera.
+- **Given** un campo de nombre vacío o con solo espacios, **when** el jugador intenta enviar el formulario, **then** el formulario no lo permite y muestra un mensaje, sin intentar unirse a la sala.
+- **Given** un código de sala que no existe, **when** el jugador intenta unirse desde `/play/[roomCode]`, **then** ve un mensaje de sala no encontrada en vez de quedarse esperando indefinidamente.
+- **Given** el jugador ya unido esperando en el lobby, **when** el host lo asigna a un equipo, **then** la vista refleja el equipo (nombre y color) sin necesidad de recargar.
+- **Given** el jugador ya unido esperando en el lobby, **when** cierra la pestaña o se corta el WebSocket, **then** se remueve de la sala (mismo comportamiento ya cubierto por "Motor de sala" — aplica también a esta vista).
 
 ## Minijuegos
 
