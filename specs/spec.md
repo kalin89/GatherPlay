@@ -27,7 +27,7 @@ Familias y grupos de amigos reunidos presencialmente, sin perfil técnico. Debe 
 
 ## Motor de sala
 
-Criterios del "RoomModule" (Fase 1 de tasks.md): crear sala, generar código, unirse por código, listar jugadores conectados. No incluye todavía armado de equipos ni fases de juego (`jugando`/`resultados`) — esos criterios se agregan aquí cuando les toque su propia tarea.
+Criterios del motor de sala (Fase 1 de tasks.md): crear sala, generar código, unirse por código, listar jugadores conectados, armado de equipos, y fases de juego (`lobby` → `jugando` → `resultados`) con temporizador y puntaje.
 
 - **Given** ningún dato previo, **when** el host crea una partida, **then** se genera un código único de sala y la sala queda en estado `lobby` sin jugadores.
 - **Given** un código de sala válido en estado `lobby`, **when** un jugador se une con un nombre, **then** se agrega a la lista de jugadores de esa sala y todos los clientes conectados a esa sala reciben la lista actualizada.
@@ -42,6 +42,20 @@ Criterios del "RoomModule" (Fase 1 de tasks.md): crear sala, generar código, un
 - **Given** una sala con equipos creados y jugadores conectados, **when** el host pide armar los equipos al azar, **then** todos los jugadores quedan redistribuidos entre los equipos existentes de la forma más pareja posible.
 - **Given** una sala sin ningún equipo creado, **when** el host pide armar los equipos al azar, **then** recibe un error y no se modifica el estado.
 - **Given** un id de jugador o de equipo que no existe en la sala, **when** el host intenta asignarlo, **then** recibe un error y no se modifica el estado.
+
+### Fases, temporizador y puntaje
+
+- **Given** una sala en `lobby` con equipos armados, **when** el host inicia una ronda con una duración en segundos, **then** la sala pasa a estado `jugando` y todos los clientes de la sala reciben el estado con el tiempo restante igual a la duración configurada.
+- **Given** una ronda en curso, **when** pasa cada segundo, **then** todos los clientes de la sala reciben el tiempo restante actualizado calculado por el servidor, sin que ningún cliente lleve su propio reloj.
+- **Given** una ronda en curso, **when** el tiempo restante llega a cero, **then** la sala pasa a estado `resultados`, se notifica el fin de la ronda con el puntaje de cada equipo y deja de emitirse tiempo restante.
+- **Given** una ronda en curso, **when** el host la termina antes de que se acabe el tiempo, **then** la sala pasa a `resultados` igual que si el tiempo se hubiera agotado y el temporizador se detiene.
+- **Given** una sala con una ronda ya en curso, **when** el host intenta iniciar otra ronda en esa misma sala, **then** recibe un error y la ronda en curso sigue corriendo con su tiempo intacto.
+- **Given** una sala en `resultados`, **when** el host inicia una ronda nueva, **then** la sala vuelve a `jugando` y los puntajes acumulados de los equipos se conservan.
+- **Given** un equipo de una sala, **when** se le otorgan puntos, **then** su puntaje acumulado aumenta en esa cantidad y todos los clientes de la sala reciben el marcador actualizado.
+- **Given** un equipo recién creado, **when** todavía no se le otorgan puntos, **then** su puntaje es cero.
+- **Given** un código de sala o un id de equipo que no existe, **when** el host intenta iniciar una ronda u otorgar puntos con ese id, **then** recibe un error y no se modifica ningún estado.
+- **Given** una duración de ronda inválida (cero, negativa o no entera), **when** el host intenta iniciar la ronda, **then** recibe un error y la sala permanece en el estado en que estaba.
+- **Given** una ronda en curso, **when** todos los jugadores de la sala se desconectan, **then** el temporizador se detiene y la sala deja de emitir actualizaciones de tiempo.
 
 ## Minijuegos
 

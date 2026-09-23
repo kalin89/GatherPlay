@@ -85,6 +85,7 @@ describe('RoomService', () => {
         name: 'Rojos',
         color: '#FF0000',
         playerIds: [],
+        score: 0,
       });
     });
 

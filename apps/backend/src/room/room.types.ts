@@ -9,11 +9,20 @@ export interface Team {
   name: string;
   color: string;
   playerIds: string[];
+  score: number;
+}
+
+export type RoomStatus = 'lobby' | 'jugando' | 'resultados';
+
+export interface RoundState {
+  durationSeconds: number;
+  remainingSeconds: number;
 }
 
 export interface RoomState {
   code: string;
-  status: 'lobby';
+  status: RoomStatus;
   players: Player[];
   teams: Team[];
+  round: RoundState | null;
 }

@@ -40,7 +40,13 @@ export class RoomService {
 
   createRoom(): RoomState {
     const code = this.generateUniqueCode();
-    const room: RoomState = { code, status: 'lobby', players: [], teams: [] };
+    const room: RoomState = {
+      code,
+      status: 'lobby',
+      players: [],
+      teams: [],
+      round: null,
+    };
     this.rooms.set(code, room);
     return room;
   }
@@ -72,7 +78,13 @@ export class RoomService {
 
   createTeam(code: string, name: string, color: string): RoomState {
     const room = this.getRoomOrThrow(code);
-    const team: Team = { id: randomUUID(), name, color, playerIds: [] };
+    const team: Team = {
+      id: randomUUID(),
+      name,
+      color,
+      playerIds: [],
+      score: 0,
+    };
     room.teams.push(team);
     return room;
   }
@@ -121,7 +133,7 @@ export class RoomService {
     return room;
   }
 
-  private getRoomOrThrow(code: string): RoomState {
+  getRoomOrThrow(code: string): RoomState {
     const room = this.rooms.get(code);
     if (!room) {
       throw new RoomNotFoundError(code);

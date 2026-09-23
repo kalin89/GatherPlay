@@ -14,7 +14,7 @@ Backlog inicial, en orden. Cada tarea se implementa y se cierra antes de pasar a
 
 - [x] `RoomModule`: crear sala, generar código, unirse por código, listar jugadores conectados.
 - [x] Armado de equipos (manual por el host + opción aleatoria).
-- [ ] `GameEngineCore`: fases de sala (`lobby` → `jugando` → `resultados`), temporizador genérico, puntaje por equipo.
+- [x] `GameEngineCore`: fases de sala (`lobby` → `jugando` → `resultados`), temporizador genérico, puntaje por equipo.
 - [ ] Vista `/screen/[roomCode]` mostrando QR + código + jugadores/equipos en lobby.
 - [ ] Vista `/play/[roomCode]` con formulario de nombre y espera en lobby.
 - [ ] E2E: camino feliz de "crear sala → unirse → armar equipos" (sin ningún minijuego todavía).

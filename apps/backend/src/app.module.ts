@@ -3,9 +3,10 @@ import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AppGateway } from './websocket/app.gateway.js';
 import { RoomModule } from './room/room.module.js';
+import { GameEngineModule } from './game-engine/game-engine.module.js';
 
 @Module({
-  imports: [RoomModule],
+  imports: [RoomModule, GameEngineModule],
   controllers: [AppController],
   providers: [AppService, AppGateway],
 })
