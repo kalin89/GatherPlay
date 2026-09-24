@@ -26,7 +26,7 @@ Backlog inicial, en orden. Cada tarea se implementa y se cierra antes de pasar a
 Se implementa Trivia primero porque es el más simple de validar (no depende de audio ni dibujo), y sirve de plantilla para los demás módulos de juego.
 
 - [x] `AiContentModule.getTriviaQuestions(categoria)`.
-- [ ] `TriviaModule` (backend): reparte pregunta, recibe respuestas, calcula puntaje con bono por rapidez.
+- [x] `TriviaModule` (backend): reparte pregunta, recibe respuestas, calcula puntaje con bono por rapidez.
 - [ ] Componentes de pantalla y control para Trivia.
 - [ ] Pruebas unitarias de las reglas + e2e del camino feliz y del caso "nadie responde a tiempo".
 

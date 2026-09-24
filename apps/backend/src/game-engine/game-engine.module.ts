@@ -6,5 +6,6 @@ import { GameEngineService } from './game-engine.service.js';
 @Module({
   imports: [RoomModule],
   providers: [GameEngineService, GameEngineGateway],
+  exports: [GameEngineService],
 })
 export class GameEngineModule {}
