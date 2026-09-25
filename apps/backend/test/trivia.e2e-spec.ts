@@ -5,31 +5,47 @@ import { io, type Socket } from 'socket.io-client';
 import { AppModule } from '../src/app.module.js';
 import type { RoomState } from '../src/room/room.types.js';
 
-interface TriviaQuestionPayload {
+interface TriviaTurnWaitingPayload {
   code: string;
-  categoria: string;
+  playerId: string;
+  playerName: string;
+  teamId: string;
+}
+
+interface TriviaTurnStartedPayload {
+  code: string;
+  playerId: string;
+  playerName: string;
   pregunta: string;
   opciones: string[];
+  durationSeconds: number;
 }
 
-interface TriviaAnswerResultPayload {
-  playerId: string;
-  opcionIndex: number | null;
-  correcta: boolean;
-  puntos: number;
-}
-
-interface TriviaResultPayload {
+interface TriviaTurnResultPayload {
   code: string;
   pregunta: string;
   opciones: string[];
   indiceCorrecto: number;
-  resultados: TriviaAnswerResultPayload[];
+  resultado: {
+    playerId: string;
+    playerName: string;
+    teamId: string;
+    opcionElegida: number | null;
+    correcta: boolean;
+    puntos: number;
+  };
 }
 
+interface TriviaMatchResultPayload {
+  code: string;
+  scores: { teamId: string; score: number }[];
+}
+
+const TOTAL_TURNS = 6; // 2 equipos de 1 jugador x 3 rondas por jugador
+
 // Sin ANTHROPIC_API_KEY en CI, AiContentService usa siempre el banco de
-// respaldo (ver ai-content/), así que la pregunta es real pero no se puede
-// predecir de antemano — estas pruebas no asumen cuál opción es la correcta.
+// respaldo, así que la pregunta es real pero no se puede predecir de
+// antemano — estas pruebas no asumen cuál opción es la correcta.
 describe('TriviaGateway (e2e)', () => {
   let app: INestApplication;
   let baseUrl: string;
@@ -67,101 +83,149 @@ describe('TriviaGateway (e2e)', () => {
     return new Promise((resolve) => client.once(event, resolve));
   }
 
-  async function createRoomWithPlayerAndTeam(): Promise<{
-    host: Socket;
-    player: Socket;
+  async function createRoomWithTwoSoloTeams(): Promise<{
+    screen: Socket;
+    playerA: Socket;
+    playerB: Socket;
     room: RoomState;
-    teamId: string;
+    teamAId: string;
+    teamBId: string;
   }> {
-    const host = connect();
-    const roomCreated = waitFor<RoomState>(host, 'room_state');
-    host.on('connect', () => host.emit('create_room'));
+    const screen = connect();
+    const roomCreated = waitFor<RoomState>(screen, 'room_state');
+    screen.on('connect', () => screen.emit('create_room'));
     const room = await roomCreated;
 
-    const player = connect();
-    const playerJoined = waitFor<RoomState>(player, 'room_state');
-    player.on('connect', () =>
-      player.emit('join_room', { code: room.code, name: 'Ana' }),
+    const playerA = connect();
+    const playerAJoined = waitFor<RoomState>(playerA, 'room_state');
+    playerA.on('connect', () =>
+      playerA.emit('join_room', { code: room.code, name: 'Ana' }),
     );
-    const joined = await playerJoined;
-    const playerId = joined.players[0]!.id;
+    const withA = await playerAJoined;
+    const playerAId = withA.players[0]!.id;
 
-    const teamCreated = waitFor<RoomState>(host, 'room_state');
-    host.emit('create_team', { code: room.code, name: 'Rojos', color: '#FF0000' });
-    const withTeam = await teamCreated;
-    const teamId = withTeam.teams[0]!.id;
+    const playerB = connect();
+    const playerBJoined = waitFor<RoomState>(playerB, 'room_state');
+    playerB.on('connect', () =>
+      playerB.emit('join_room', { code: room.code, name: 'Beto' }),
+    );
+    const withB = await playerBJoined;
+    const playerBId = withB.players.find((p) => p.name === 'Beto')!.id;
 
-    const assigned = waitFor<RoomState>(host, 'room_state');
-    host.emit('assign_team', { code: room.code, playerId, teamId });
-    await assigned;
+    const teamACreated = waitFor<RoomState>(screen, 'room_state');
+    screen.emit('create_team', { code: room.code, name: 'Rojos', color: '#FF0000' });
+    const withTeamA = await teamACreated;
+    const teamAId = withTeamA.teams[0]!.id;
 
-    return { host, player, room, teamId };
+    const teamBCreated = waitFor<RoomState>(screen, 'room_state');
+    screen.emit('create_team', { code: room.code, name: 'Azules', color: '#0000FF' });
+    const withTeamB = await teamBCreated;
+    const teamBId = withTeamB.teams[1]!.id;
+
+    const assignedA = waitFor<RoomState>(screen, 'room_state');
+    screen.emit('assign_team', { code: room.code, playerId: playerAId, teamId: teamAId });
+    await assignedA;
+
+    const assignedB = waitFor<RoomState>(screen, 'room_state');
+    screen.emit('assign_team', { code: room.code, playerId: playerBId, teamId: teamBId });
+    await assignedB;
+
+    // La pantalla se re-suscribe con watch_room, que es lo que la une a la
+    // sala `${code}:screen` (join_room/create_room no lo hacen).
+    const watched = waitFor<RoomState>(screen, 'room_state');
+    screen.emit('watch_room', { code: room.code });
+    await watched;
+
+    return { screen, playerA, playerB, room, teamAId, teamBId };
   }
 
-  it('camino feliz: reparte la pregunta, el jugador responde y recibe el resultado', async () => {
-    const { host, player, room, teamId } = await createRoomWithPlayerAndTeam();
+  it(
+    'camino feliz: reparte turnos individuales, cada jugador responde y la partida termina con puntaje final',
+    async () => {
+      const { screen, playerA, playerB, room } = await createRoomWithTwoSoloTeams();
 
-    const questionForHost = waitFor<TriviaQuestionPayload>(host, 'trivia_question');
-    const questionForPlayer = waitFor<TriviaQuestionPayload>(player, 'trivia_question');
-    host.emit('start_trivia_round', {
-      code: room.code,
-      categoria: 'general',
-      durationSeconds: 2,
-    });
+      const selected = waitFor<RoomState>(screen, 'room_state');
+      screen.emit('select_game', { code: room.code, gameId: 'trivia' });
+      await selected;
 
-    const [hostQuestion, playerQuestion] = await Promise.all([
-      questionForHost,
-      questionForPlayer,
-    ]);
-    expect(hostQuestion.pregunta).toBeTruthy();
-    expect(hostQuestion.opciones).toHaveLength(4);
-    expect(playerQuestion.pregunta).toBe(hostQuestion.pregunta);
-    expect(hostQuestion).not.toHaveProperty('indiceCorrecto');
+      const matchResultPromise = waitFor<TriviaMatchResultPayload>(
+        screen,
+        'trivia_match_result',
+      );
 
-    const accepted = waitFor<{ opcionIndex: number }>(player, 'trivia_answer_accepted');
-    player.emit('submit_trivia_answer', { code: room.code, opcionIndex: 0 });
-    await accepted;
+      // Se arman los listeners del turno 0 ANTES de arrancar la partida —
+      // si se armaran adentro del loop, después de emitir start_trivia_game,
+      // podría haber una carrera con el servidor ya habiendo emitido esos
+      // eventos (a diferencia de los turnos siguientes, que sí tienen de
+      // por medio la pausa de TURN_TRANSITION_DELAY_MS).
+      let startedOnA = waitFor<TriviaTurnStartedPayload>(playerA, 'trivia_turn_started');
+      let startedOnB = waitFor<TriviaTurnStartedPayload>(playerB, 'trivia_turn_started');
+      let waitingOnScreen = waitFor<TriviaTurnWaitingPayload>(screen, 'trivia_turn_waiting');
+      screen.emit('start_trivia_game', { code: room.code });
 
-    const result = waitFor<TriviaResultPayload>(host, 'trivia_result');
-    const finalState = waitFor<RoomState>(host, 'room_state');
-    const resultPayload = await result;
+      for (let turn = 0; turn < TOTAL_TURNS; turn++) {
+        await waitingOnScreen;
 
-    expect(resultPayload.resultados).toHaveLength(1);
-    const [playerResult] = resultPayload.resultados;
-    expect(playerResult!.opcionIndex).toBe(0);
-    expect(playerResult!.correcta).toBe(playerResult!.opcionIndex === resultPayload.indiceCorrecto);
+        const [current, other, startedPayload] = await Promise.race([
+          startedOnA.then((payload) => [playerA, playerB, payload] as const),
+          startedOnB.then((payload) => [playerB, playerA, payload] as const),
+        ]);
 
-    const state = await finalState;
-    const team = state.teams.find((t) => t.id === teamId)!;
-    if (playerResult!.correcta) {
-      expect(team.score).toBe(playerResult!.puntos);
-      expect(team.score).toBeGreaterThan(0);
-    } else {
-      expect(team.score).toBe(0);
-    }
-  });
+        expect(startedPayload.pregunta).toBeTruthy();
+        expect(startedPayload.opciones).toHaveLength(4);
 
-  it('nadie responde a tiempo: cuenta como incorrecta, sin puntos negativos', async () => {
-    const { host, room, teamId } = await createRoomWithPlayerAndTeam();
+        const otherGotQuestion = Promise.race([
+          waitFor(other, 'trivia_turn_started').then(() => true),
+          new Promise((resolve) => setTimeout(() => resolve(false), 200)),
+        ]);
 
-    const question = waitFor<TriviaQuestionPayload>(host, 'trivia_question');
-    host.emit('start_trivia_round', { code: room.code, categoria: 'ciencia', durationSeconds: 1 });
-    await question;
+        // Listeners del próximo turno armados antes de responder este, por
+        // la misma razón de arriba.
+        const isLastTurn = turn === TOTAL_TURNS - 1;
+        if (!isLastTurn) {
+          startedOnA = waitFor<TriviaTurnStartedPayload>(playerA, 'trivia_turn_started');
+          startedOnB = waitFor<TriviaTurnStartedPayload>(playerB, 'trivia_turn_started');
+          waitingOnScreen = waitFor<TriviaTurnWaitingPayload>(screen, 'trivia_turn_waiting');
+        }
 
-    const result = waitFor<TriviaResultPayload>(host, 'trivia_result');
-    const resultPayload = await result;
+        const accepted = waitFor<{ opcionIndex: number }>(current, 'trivia_answer_accepted');
+        const resultOnScreen = waitFor<TriviaTurnResultPayload>(screen, 'trivia_turn_result');
+        current.emit('submit_trivia_answer', { code: room.code, opcionIndex: 0 });
+        await accepted;
 
-    expect(resultPayload.resultados).toEqual([
-      { playerId: expect.any(String), opcionIndex: null, correcta: false, puntos: 0 },
-    ]);
+        expect(await otherGotQuestion).toBe(false);
 
-    // Nadie respondió → no hubo addScore, así que no sale ningún room_state
-    // nuevo por eso; watch_room pide un snapshot fresco para confirmar que
-    // el puntaje del equipo se quedó en 0.
-    const state = waitFor<RoomState>(host, 'room_state');
-    host.emit('watch_room', { code: room.code });
-    const finalState = await state;
+        const result = await resultOnScreen;
+        expect(result.resultado.opcionElegida).toBe(0);
+        expect(result.resultado.correcta).toBe(result.resultado.puntos > 0);
+      }
 
-    expect(finalState.teams.find((t) => t.id === teamId)!.score).toBe(0);
-  });
+      const matchResult = await matchResultPromise;
+      expect(matchResult.scores).toHaveLength(2);
+    },
+    30_000,
+  );
+
+  it(
+    'nadie responde a tiempo: cuenta como incorrecta, sin puntos negativos',
+    async () => {
+      const { screen, room } = await createRoomWithTwoSoloTeams();
+
+      const selected = waitFor<RoomState>(screen, 'room_state');
+      screen.emit('select_game', { code: room.code, gameId: 'trivia' });
+      await selected;
+
+      const result = waitFor<TriviaTurnResultPayload>(screen, 'trivia_turn_result');
+      screen.emit('start_trivia_game', { code: room.code });
+
+      const resultPayload = await result;
+
+      expect(resultPayload.resultado).toMatchObject({
+        opcionElegida: null,
+        correcta: false,
+        puntos: 0,
+      });
+    },
+    30_000,
+  );
 });

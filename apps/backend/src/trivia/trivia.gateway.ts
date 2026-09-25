@@ -10,23 +10,19 @@ import { OnModuleDestroy } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import type { Subscription } from 'rxjs';
 import { RoomNotFoundError } from '../room/room.service.js';
-import { UnknownTriviaCategoryError } from '../ai-content/ai-content.service.js';
-import {
-  RoundAlreadyRunningError,
-  InvalidRoundDurationError,
-} from '../game-engine/game-engine.service.js';
+import { NotEnoughTeamsError } from '../game-engine/turn-distribution.js';
 import {
   AlreadyAnsweredError,
   InvalidAnswerIndexError,
-  NoTriviaRoundError,
+  NoTriviaMatchError,
+  NotYourTurnError,
   PlayerNotInRoomError,
+  TriviaMatchAlreadyRunningError,
   TriviaService,
 } from './trivia.service.js';
 
-interface StartTriviaRoundPayload {
+interface StartTriviaGamePayload {
   code: string;
-  categoria: string;
-  durationSeconds: number;
 }
 
 interface SubmitTriviaAnswerPayload {
@@ -36,11 +32,11 @@ interface SubmitTriviaAnswerPayload {
 
 const KNOWN_ERRORS = [
   RoomNotFoundError,
-  RoundAlreadyRunningError,
-  InvalidRoundDurationError,
-  UnknownTriviaCategoryError,
-  NoTriviaRoundError,
+  NotEnoughTeamsError,
+  TriviaMatchAlreadyRunningError,
+  NoTriviaMatchError,
   PlayerNotInRoomError,
+  NotYourTurnError,
   AlreadyAnsweredError,
   InvalidAnswerIndexError,
 ];
@@ -61,21 +57,50 @@ export class TriviaGateway implements OnGatewayInit, OnModuleDestroy {
   afterInit(): void {
     this.subscription = this.trivia.events$.subscribe((event) => {
       switch (event.type) {
-        case 'trivia_question':
-          this.server.to(event.code).emit('trivia_question', {
+        case 'room_state':
+          this.server.to(event.code).emit('room_state', event.room);
+          break;
+        case 'trivia_turn_waiting':
+          this.server.to(event.code).emit('trivia_turn_waiting', {
             code: event.code,
-            categoria: event.categoria,
-            pregunta: event.pregunta,
-            opciones: event.opciones,
+            playerId: event.playerId,
+            playerName: event.playerName,
+            teamId: event.teamId,
           });
           break;
-        case 'trivia_result':
-          this.server.to(event.code).emit('trivia_result', {
+        case 'trivia_turn_started':
+          for (const targetId of event.targetSocketIds) {
+            this.server.to(targetId).emit('trivia_turn_started', {
+              code: event.code,
+              playerId: event.playerId,
+              playerName: event.playerName,
+              pregunta: event.pregunta,
+              opciones: event.opciones,
+              durationSeconds: event.durationSeconds,
+            });
+          }
+          break;
+        case 'trivia_turn_update':
+          for (const targetId of event.targetSocketIds) {
+            this.server.to(targetId).emit('trivia_turn_update', {
+              code: event.code,
+              remainingSeconds: event.remainingSeconds,
+            });
+          }
+          break;
+        case 'trivia_turn_result':
+          this.server.to(event.code).emit('trivia_turn_result', {
             code: event.code,
             pregunta: event.pregunta,
             opciones: event.opciones,
             indiceCorrecto: event.indiceCorrecto,
-            resultados: event.resultados,
+            resultado: event.resultado,
+          });
+          break;
+        case 'trivia_match_result':
+          this.server.to(event.code).emit('trivia_match_result', {
+            code: event.code,
+            scores: event.scores,
           });
           break;
       }
@@ -86,13 +111,13 @@ export class TriviaGateway implements OnGatewayInit, OnModuleDestroy {
     this.subscription?.unsubscribe();
   }
 
-  @SubscribeMessage('start_trivia_round')
-  async handleStartTriviaRound(
-    @MessageBody() payload: StartTriviaRoundPayload,
+  @SubscribeMessage('start_trivia_game')
+  handleStartTriviaGame(
+    @MessageBody() payload: StartTriviaGamePayload,
     @ConnectedSocket() client: Socket,
   ) {
     try {
-      await this.trivia.startRound(payload.code, payload.categoria, payload.durationSeconds);
+      this.trivia.startMatch(payload.code);
     } catch (error) {
       if (isKnownError(error)) {
         client.emit('error', { message: error.message });

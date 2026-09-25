@@ -47,6 +47,13 @@ interface WatchRoomPayload {
   code: string;
 }
 
+// Sala de Socket.io aparte para la pantalla de una sala: le permite a un
+// minijuego (ej. Trivia) mandarle contenido completo (la pregunta) solo a la
+// pantalla + el jugador en turno, sin exponérselo al resto de los celulares.
+export function screenRoomName(code: string): string {
+  return `${code}:screen`;
+}
+
 interface SelectGamePayload {
   code: string;
   gameId: string;
@@ -197,6 +204,7 @@ export class RoomGateway implements OnGatewayDisconnect {
     try {
       const room = this.roomService.getRoomOrThrow(payload.code);
       void client.join(room.code);
+      void client.join(screenRoomName(room.code));
       client.emit('room_state', room);
     } catch (error) {
       if (error instanceof RoomNotFoundError) {

@@ -1,14 +1,25 @@
-import { Injectable, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
-import { Observable, Subject, type Subscription } from 'rxjs';
+import { Injectable, OnModuleDestroy, Optional } from '@nestjs/common';
+import { Observable, Subject } from 'rxjs';
 import { RoomService } from '../room/room.service.js';
+import { screenRoomName } from '../room/room.gateway.js';
 import { GameEngineService } from '../game-engine/game-engine.service.js';
 import { AiContentService } from '../ai-content/ai-content.service.js';
-import type { TriviaAnswerResult, TriviaEvent } from './trivia.types.js';
+import { RoundTimer } from '../game-engine/round-timer.js';
+import { distributeTurns, type TurnAssignment } from '../game-engine/turn-distribution.js';
+import type { TeamScore } from '../game-engine/game-engine.types.js';
+import type { TriviaEvent, TriviaTurnResult } from './trivia.types.js';
 
-export class NoTriviaRoundError extends Error {
+export class TriviaMatchAlreadyRunningError extends Error {
   constructor(code: string) {
-    super(`La sala ${code} no tiene una pregunta de trivia activa`);
-    this.name = 'NoTriviaRoundError';
+    super(`La sala ${code} ya tiene una partida de trivia en curso`);
+    this.name = 'TriviaMatchAlreadyRunningError';
+  }
+}
+
+export class NoTriviaMatchError extends Error {
+  constructor(code: string) {
+    super(`La sala ${code} no tiene una partida de trivia activa`);
+    this.name = 'NoTriviaMatchError';
   }
 }
 
@@ -19,9 +30,16 @@ export class PlayerNotInRoomError extends Error {
   }
 }
 
+export class NotYourTurnError extends Error {
+  constructor(playerId: string) {
+    super(`No es el turno del jugador ${playerId}`);
+    this.name = 'NotYourTurnError';
+  }
+}
+
 export class AlreadyAnsweredError extends Error {
   constructor(playerId: string) {
-    super(`El jugador ${playerId} ya respondió esta pregunta`);
+    super(`El jugador ${playerId} ya respondió este turno`);
     this.name = 'AlreadyAnsweredError';
   }
 }
@@ -33,87 +51,81 @@ export class InvalidAnswerIndexError extends Error {
   }
 }
 
-interface TriviaAnswer {
-  opcionIndex: number;
-  answeredAtMs: number;
-}
-
-interface TriviaRoundState {
-  categoria: string;
+interface TriviaQuestionState {
   pregunta: string;
   opciones: string[];
   indiceCorrecto: number;
-  durationSeconds: number;
-  startedAtMs: number;
-  answers: Map<string, TriviaAnswer>;
 }
 
-const BASE_POINTS = 100;
-const MAX_SPEED_BONUS = 50;
+interface TriviaMatchState {
+  turns: TurnAssignment[];
+  currentIndex: number;
+  currentQuestion: TriviaQuestionState | null;
+  answered: boolean;
+  timer: RoundTimer | null;
+}
 
-// Reparte una pregunta por ronda (GameEngineService no conoce nada de Trivia —
-// ver specs/features/trivia-module/analysis.md para cómo se engancha sin tocar
-// GameEngineCore) y calcula el puntaje con bono por rapidez al resolver.
+const DEFAULT_CATEGORY = 'general';
+const ROUNDS_PER_PLAYER = 3;
+const TRIVIA_TURN_POINTS = 100;
+const TRIVIA_TURN_SECONDS = 15;
+const TURN_TRANSITION_DELAY_MS = 2500;
+
+// Rediseño a turnos individuales — ver specs/features/trivia-module/analysis.md
+// para por qué esto usa RoundTimer directamente en vez de
+// GameEngineService.startRound/endRound (una partida son N turnos, no una
+// ronda), y solo reusa gameEngine.addScore.
 @Injectable()
-export class TriviaService implements OnModuleInit, OnModuleDestroy {
-  private readonly rounds = new Map<string, TriviaRoundState>();
+export class TriviaService implements OnModuleDestroy {
+  private readonly matches = new Map<string, TriviaMatchState>();
   private readonly eventsSubject = new Subject<TriviaEvent>();
   readonly events$: Observable<TriviaEvent> = this.eventsSubject.asObservable();
-  private subscription: Subscription | null = null;
 
   constructor(
     private readonly rooms: RoomService,
     private readonly gameEngine: GameEngineService,
     private readonly aiContent: AiContentService,
-    @Optional() private readonly now: () => number = Date.now,
+    @Optional()
+    private readonly scheduler: (callback: () => void, ms: number) => void = (
+      callback,
+      ms,
+    ) => {
+      setTimeout(callback, ms);
+    },
   ) {}
 
-  onModuleInit(): void {
-    this.subscription = this.gameEngine.events$.subscribe((event) => {
-      if (event.type === 'round_update' && event.remainingSeconds === 0) {
-        this.resolveRound(event.code);
-      } else if (event.type === 'round_result') {
-        // Se cerró por end_round genérico (no por timeout) — no hay forma de
-        // puntuar a tiempo sin tocar GameEngineCore, ver analysis.md. Se
-        // limpia el estado para no dejar respuestas huérfanas aceptando
-        // envíos de una ronda que ya terminó.
-        this.rounds.delete(event.code);
-      }
-    });
-  }
-
   onModuleDestroy(): void {
-    this.subscription?.unsubscribe();
+    for (const match of this.matches.values()) {
+      match.timer?.stop();
+    }
+    this.matches.clear();
   }
 
-  async startRound(code: string, categoria: string, durationSeconds: number): Promise<void> {
-    const [pregunta] = await this.aiContent.getTriviaQuestions(categoria, 1);
+  startMatch(code: string): void {
+    if (this.matches.has(code)) {
+      throw new TriviaMatchAlreadyRunningError(code);
+    }
 
-    this.gameEngine.startRound(code, durationSeconds);
+    const room = this.rooms.getRoomOrThrow(code);
+    const turns = distributeTurns(room.teams, ROUNDS_PER_PLAYER);
 
-    this.rounds.set(code, {
-      categoria,
-      pregunta: pregunta.pregunta,
-      opciones: pregunta.opciones,
-      indiceCorrecto: pregunta.indiceCorrecto,
-      durationSeconds,
-      startedAtMs: this.now(),
-      answers: new Map(),
+    room.status = 'jugando';
+    this.matches.set(code, {
+      turns,
+      currentIndex: 0,
+      currentQuestion: null,
+      answered: false,
+      timer: null,
     });
 
-    this.emit({
-      type: 'trivia_question',
-      code,
-      categoria,
-      pregunta: pregunta.pregunta,
-      opciones: pregunta.opciones,
-    });
+    this.emit({ type: 'room_state', code, room });
+    void this.startTurn(code);
   }
 
   submitAnswer(code: string, socketId: string, opcionIndex: number): void {
-    const round = this.rounds.get(code);
-    if (!round) {
-      throw new NoTriviaRoundError(code);
+    const match = this.matches.get(code);
+    if (!match) {
+      throw new NoTriviaMatchError(code);
     }
 
     const room = this.rooms.getRoomOrThrow(code);
@@ -122,69 +134,134 @@ export class TriviaService implements OnModuleInit, OnModuleDestroy {
       throw new PlayerNotInRoomError(socketId);
     }
 
-    if (!Number.isInteger(opcionIndex) || opcionIndex < 0 || opcionIndex >= round.opciones.length) {
-      throw new InvalidAnswerIndexError(opcionIndex);
+    const turn = match.turns[match.currentIndex]!;
+    if (turn.playerId !== player.id) {
+      throw new NotYourTurnError(player.id);
     }
-
-    if (round.answers.has(player.id)) {
+    if (match.answered) {
       throw new AlreadyAnsweredError(player.id);
     }
 
-    round.answers.set(player.id, {
-      opcionIndex,
-      answeredAtMs: this.now() - round.startedAtMs,
-    });
+    const question = match.currentQuestion!;
+    if (
+      !Number.isInteger(opcionIndex) ||
+      opcionIndex < 0 ||
+      opcionIndex >= question.opciones.length
+    ) {
+      throw new InvalidAnswerIndexError(opcionIndex);
+    }
+
+    match.answered = true;
+    match.timer?.stop();
+    this.resolveTurn(code, opcionIndex);
   }
 
-  private resolveRound(code: string): void {
-    const round = this.rounds.get(code);
-    if (!round) return;
+  private async startTurn(code: string): Promise<void> {
+    const match = this.matches.get(code)!;
+    const room = this.rooms.getRoomOrThrow(code);
+    const turn = match.turns[match.currentIndex]!;
+    const player = room.players.find((p) => p.id === turn.playerId)!;
 
-    const room = this.rooms.getRoom(code);
-    if (!room) {
-      this.rounds.delete(code);
-      return;
-    }
+    const [pregunta] = await this.aiContent.getTriviaQuestions(DEFAULT_CATEGORY, 1);
+    match.currentQuestion = {
+      pregunta: pregunta.pregunta,
+      opciones: pregunta.opciones,
+      indiceCorrecto: pregunta.indiceCorrecto,
+    };
+    match.answered = false;
 
-    const durationMs = round.durationSeconds * 1000;
-    const resultados: TriviaAnswerResult[] = [];
-
-    for (const player of room.players) {
-      const answer = round.answers.get(player.id);
-      const correcta = answer !== undefined && answer.opcionIndex === round.indiceCorrecto;
-      const puntos = answer && correcta ? this.calculatePoints(answer.answeredAtMs, durationMs) : 0;
-
-      resultados.push({
-        playerId: player.id,
-        opcionIndex: answer?.opcionIndex ?? null,
-        correcta,
-        puntos,
-      });
-
-      if (puntos > 0) {
-        const team = room.teams.find((t) => t.playerIds.includes(player.id));
-        if (team) {
-          this.gameEngine.addScore(code, team.id, puntos);
-        }
-      }
-    }
+    const targetSocketIds = [screenRoomName(code), player.socketId];
 
     this.emit({
-      type: 'trivia_result',
+      type: 'trivia_turn_waiting',
       code,
-      pregunta: round.pregunta,
-      opciones: round.opciones,
-      indiceCorrecto: round.indiceCorrecto,
-      resultados,
+      playerId: player.id,
+      playerName: player.name,
+      teamId: turn.teamId,
+    });
+    this.emit({
+      type: 'trivia_turn_started',
+      code,
+      targetSocketIds,
+      playerId: player.id,
+      playerName: player.name,
+      pregunta: match.currentQuestion.pregunta,
+      opciones: match.currentQuestion.opciones,
+      durationSeconds: TRIVIA_TURN_SECONDS,
     });
 
-    this.rounds.delete(code);
+    const timer = new RoundTimer(
+      (remainingSeconds) =>
+        this.emit({ type: 'trivia_turn_update', code, targetSocketIds, remainingSeconds }),
+      () => this.resolveTurn(code, null),
+    );
+    match.timer = timer;
+    timer.start(TRIVIA_TURN_SECONDS);
   }
 
-  private calculatePoints(answeredAtMs: number, durationMs: number): number {
-    const fraccionRestante = 1 - answeredAtMs / durationMs;
-    const bono = Math.round(MAX_SPEED_BONUS * Math.max(0, Math.min(1, fraccionRestante)));
-    return BASE_POINTS + bono;
+  private resolveTurn(code: string, opcionIndex: number | null): void {
+    const match = this.matches.get(code);
+    if (!match) return;
+
+    const room = this.rooms.getRoomOrThrow(code);
+    const turn = match.turns[match.currentIndex]!;
+    const player = room.players.find((p) => p.id === turn.playerId)!;
+    const question = match.currentQuestion!;
+
+    const correcta = opcionIndex !== null && opcionIndex === question.indiceCorrecto;
+    const puntos = correcta ? TRIVIA_TURN_POINTS : 0;
+
+    if (puntos > 0) {
+      this.gameEngine.addScore(code, turn.teamId, puntos);
+    }
+
+    const resultado: TriviaTurnResult = {
+      playerId: player.id,
+      playerName: player.name,
+      teamId: turn.teamId,
+      opcionElegida: opcionIndex,
+      correcta,
+      puntos,
+    };
+
+    this.emit({
+      type: 'trivia_turn_result',
+      code,
+      pregunta: question.pregunta,
+      opciones: question.opciones,
+      indiceCorrecto: question.indiceCorrecto,
+      resultado,
+    });
+
+    match.timer = null;
+    this.scheduler(() => this.advanceOrFinish(code), TURN_TRANSITION_DELAY_MS);
+  }
+
+  private advanceOrFinish(code: string): void {
+    const match = this.matches.get(code);
+    if (!match) return;
+
+    if (match.currentIndex + 1 < match.turns.length) {
+      match.currentIndex++;
+      void this.startTurn(code);
+    } else {
+      this.finishMatch(code);
+    }
+  }
+
+  private finishMatch(code: string): void {
+    const room = this.rooms.getRoomOrThrow(code);
+    room.status = 'resultados';
+    room.round = null;
+
+    const scores: TeamScore[] = room.teams.map((team) => ({
+      teamId: team.id,
+      score: team.score,
+    }));
+
+    this.matches.delete(code);
+    this.emit({ type: 'room_state', code, room });
+    this.emit({ type: 'trivia_match_result', code, scores });
   }
 
   private emit(event: TriviaEvent): void {
