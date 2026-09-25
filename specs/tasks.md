@@ -26,8 +26,10 @@ Backlog inicial, en orden. Cada tarea se implementa y se cierra antes de pasar a
 Se implementa Trivia primero porque es el más simple de validar (no depende de audio ni dibujo), y sirve de plantilla para los demás módulos de juego.
 
 - [x] `AiContentModule.getTriviaQuestions(categoria)`.
-- [x] `TriviaModule` (backend): reparte pregunta, recibe respuestas, calcula puntaje con bono por rapidez.
-- [ ] Componentes de pantalla y control para Trivia.
+- [ ] Selección y arranque de juego (backend): campo `RoomState.currentGame`, evento `select_game`, utilidad compartida de reparto de turnos (`distributeTurns`). Base genérica, no específica de Trivia — sienta lo que la tarea de Fase 4 "Selector de siguiente juego" va a reusar/extender. Ver `specs/features/game-selection/analysis.md`.
+- [ ] Panel de selección de juego (frontend, `/screen` + `/play`): botón "Iniciar partida" → lista de juegos disponibles → al elegir uno, pantalla y celulares pasan a su vista. Depende de: `specs/features/game-selection/analysis.md`. Ver `specs/features/game-selection-ui/analysis.md`.
+- [ ] `TriviaModule` (backend): rediseñado a turnos individuales — elige al azar el equipo y jugador que empieza, reparte los turnos parejo entre los integrantes de cada equipo, resuelve cada turno (con límite de tiempo, sin bono por rapidez) y avanza al siguiente jugador del equipo contrario. Reemplaza el diseño anterior de "todos los jugadores responden en simultáneo con bono por rapidez". Depende de: `specs/features/game-selection/analysis.md` (reparto de turnos). Ver `specs/features/trivia-module/analysis.md`.
+- [ ] Componentes de pantalla y control para Trivia (frontend): turno individual con nombre del jugador, pregunta y 4 opciones en pantalla y en su celular (los demás celulares en espera sin ver la pregunta), animación al seleccionar, sonido de acierto/error desde el dispositivo del host. Depende de: `specs/features/trivia-module/analysis.md` y `specs/features/game-selection-ui/analysis.md`. Ver `specs/features/trivia-ui/analysis.md`.
 - [ ] Pruebas unitarias de las reglas + e2e del camino feliz y del caso "nadie responde a tiempo".
 
 ## Fase 3 — Resto de minijuegos (uno por tarea, mismo patrón que Trivia)
@@ -40,12 +42,13 @@ Se implementa Trivia primero porque es el más simple de validar (no depende de 
 - [ ] ¿Quién es quién?
 - [ ] La Rocola (buzzer de dos jugadores compitiendo)
 - [ ] Cadena de palabras contrarreloj
+- [ ] Memoriza los objetos en la imagen (bloqueada: falta que Kalin agregue el requerimiento en `spec.md` → "Minijuegos" → "10. Memoriza los objetos en la imagen")
 
 Cada una de estas ocho tareas incluye: módulo backend, componentes de pantalla/control, pruebas unitarias de sus reglas específicas, y e2e del camino feliz + el caso límite descrito en spec.md.
 
 ## Fase 4 — Pulido de sesión completa
 
-- [ ] Selector de "siguiente juego" entre ronda y ronda, sin tener que recrear la sala.
+- [ ] Selector de "siguiente juego" entre ronda y ronda, sin tener que recrear la sala. (El panel para elegir el primer juego, tras armar equipos, ya se construye en Fase 2 — esta tarea es reutilizar/extender esa misma base para la transición entre partidas sucesivas.)
 - [ ] Marcador acumulado visible entre minijuegos.
 - [ ] Manejo de reconexión (un jugador pierde señal y vuelve a entrar con el mismo código sin perder su lugar en el equipo).
 - [ ] Persistir preguntas generadas por IA en `content_banks` (Postgres) para reusarlas y como respaldo creciente. Depende de: `specs/features/ai-content-trivia/analysis.md`.

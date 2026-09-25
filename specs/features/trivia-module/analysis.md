@@ -1,111 +1,205 @@
 # `TriviaModule` (backend) — Análisis técnico
 
-Segunda tarea de Fase 2 (ver `tasks.md`). Depende de
-`specs/features/ai-content-trivia/analysis.md` (`AiContentModule.getTriviaQuestions`,
-ya listo) y de `GameEngineModule` (fases/temporizador/puntaje, Fase 1). La tarea
-siguiente, "Componentes de pantalla y control para Trivia", es frontend — ya está
-separada en `tasks.md`, así que esta queda 100% backend sin necesidad de dividirla más.
+**Reescritura completa** de esta tarea de Fase 2 (ver `tasks.md`) — el diseño anterior
+("todos los jugadores responden en simultáneo, bono por rapidez") se reemplaza por
+turnos individuales, por cambio de requerimiento explícito de Kalin. Depende de
+`specs/features/ai-content-trivia/analysis.md` (`AiContentModule.getTriviaQuestions`),
+`GameEngineModule` (Fase 1, solo para `addScore` — ver más abajo por qué no se reusa
+más que eso) y `specs/features/game-selection/analysis.md` (`distributeTurns`,
+`RoomState.currentGame`). El código viejo de `apps/backend/src/trivia/` (no
+commiteado) se reescribe, no se parchea — el modelo de estado es distinto de raíz.
 
-## Cómo encaja con `GameEngineService`
+## Cómo encaja con `GameEngineService` (y por qué esta vez es distinto)
 
-`GameEngineService` maneja fases/temporizador/puntaje de forma genérica (`startRound`,
-`endRound`, `addScore`, eventos `room_state` / `round_started` / `round_update` /
-`round_result`). Todavía no tiene un mecanismo de "plugin" para que un minijuego
-enganche su propia lógica antes de que la ronda se cierre — `plan.md` describe esa idea
-a futuro, pero el código real hoy es más simple. No se tocó ni se construyó ese
-mecanismo genérico acá: es la primera tarea de un solo minijuego, prematuro generalizar
-sin un segundo caso real que lo confirme.
+El diseño anterior reusaba `gameEngine.startRound`/el `RoundTimer` interno para **una**
+pregunta por ronda — encajaba porque "una pregunta" y "una ronda" eran lo mismo.
+Ahora una partida de Trivia son varios turnos (rondas × tamaño del equipo más grande,
+por equipo — ver "Reparto de turnos" en `spec.md`) dentro de una sola partida, y
+`room.status` debe quedarse en `jugando` durante TODOS esos turnos, pasando a
+`resultados` recién cuando se termina el último. `GameEngineService.startRound` modela
+un único temporizador de duración fija que termina en `resultados` — no encaja con "N
+temporizadores cortos seguidos, misma partida". Reusarlo turno a turno haría que
+`room.status` parpadeara a `resultados` después de cada pregunta, lo cual es
+incorrecto.
 
-En cambio, `TriviaService` se apoya en algo que ya garantiza el código actual:
-`RoundTimer` (`game-engine/round-timer.ts`) llama `onTick` (dispara `round_update`) y
-recién **después** de que esa llamada termina revisa si `remaining <= 0` para llamar
-`onEnd` (dispara `round_result` y pasa la sala a `resultados`). Como `events$` de RxJS
-notifica a los suscriptores de forma síncrona, `TriviaService` escucha `round_update` y,
-al ver `remainingSeconds === 0`, resuelve las respuestas y llama
-`gameEngine.addScore(...)` ahí mismo (síncrono) — esos puntos ya están aplicados a
-`room.teams` antes de que `RoundTimer` siga su curso y dispare `round_result`. Resultado:
-`round_result` sale con el puntaje ya correcto, sin tocar una línea de
-`GameEngineService` (más allá de exportar `GameEngineService` desde `GameEngineModule`,
-que no lo exportaba todavía — ver "Cambios de wiring" abajo).
+En cambio, `TriviaService`:
 
-**Límite explícito:** si alguien termina la ronda antes de tiempo con el evento genérico
-`end_round` (no es un evento de Trivia), ese camino no pasa por `round_update` y
-`TriviaService` no llega a tiempo de premiar respuestas — la ronda igual cierra bien
-(sin crashear, sin doble conteo: `TriviaService` limpia su estado al ver `round_result`
-para ese código), pero esas respuestas no se puntúan. No está en los criterios de
-`spec.md` para Trivia (solo hablan de que el temporizador llegue a cero), así que queda
-documentado como no soportado en vez de resolverlo con más complejidad.
+- Usa `RoundTimer` (`game-engine/round-timer.ts`) **directamente**, un temporizador por
+  turno, sin pasar por `GameEngineService.startRound/endRound` — es la misma clase
+  reutilizable, no el orquestador de más alto nivel.
+- Muta `room.status`/`room.round` directamente sobre el objeto que devuelve
+  `roomService.getRoomOrThrow(code)`, igual que ya hace `GameEngineService` hoy
+  (`room.status = 'jugando'` es una mutación directa ahí también, no pasa por ningún
+  setter). Es el mismo patrón ya establecido en el código, no una excepción nueva.
+- Sigue usando `gameEngine.addScore(code, teamId, puntos)` para sumar puntaje — eso sí
+  se reusa tal cual, ya emite `room_state` con el marcador actualizado.
+- Emite sus propios eventos por `TriviaService.events$` (incluido un `room_state`
+  propio para las mutaciones de `status`/`round` que hace directamente, ya que esas no
+  pasan por `GameEngineService.events$`) — mismo criterio synchronous-por-RxJS que ya
+  usaba el diseño anterior.
 
 ## Criterios de aceptación
 
-Ver `spec.md` → "Minijuegos" → "4. Trivia / Preguntados".
+Ver `spec.md` → "Minijuegos" → "4. Trivia / Preguntados" y "Motor de sala" → "Reparto
+de turnos entre jugadores de un equipo".
+
+## Decisiones de esta iteración (confirmadas con Kalin)
+
+- **Categoría fija por ahora**: `DEFAULT_CATEGORY: TriviaCategory = 'general'`, sin
+  selector en el host. Se deja como constante fácil de cambiar; un selector de
+  categoría es pulido a futuro, no de esta tarea.
+- **3 rondas por jugador por defecto**: `ROUNDS_PER_PLAYER = 3` (constante).
+- **Sin bono por rapidez**: `TRIVIA_TURN_POINTS = 100` fijo si acierta, `0` si no.
+- **Duración del turno**: `TRIVIA_TURN_SECONDS = 15` (constante, ajustable — no hay un
+  valor pedido explícitamente).
+- **Pausa entre turnos**: `TURN_TRANSITION_DELAY_MS = 2500` — la controla el backend
+  (no el frontend) para que la cuenta del siguiente turno no arranque mientras el
+  cliente todavía está mostrando la animación/sonido del anterior (constitution.md,
+  principio 3: el tiempo real vive en el servidor).
 
 ## Diseño
 
-Carpeta `apps/backend/src/trivia/`, mismo estilo que `game-engine/`:
+Carpeta `apps/backend/src/trivia/` (se reescribe entera).
 
-- **`trivia.types.ts`**: `TriviaAnswerResult` (por jugador: `opcionIndex`, `correcta`,
-  `puntos`) y `TriviaEvent` (`trivia_question` sin `indiceCorrecto` / `trivia_result`
-  con el detalle completo).
-- **`trivia.service.ts`**: `TriviaService`, con estado en memoria
-  (`Map<code, TriviaRoundState>`, con la pregunta, opciones, `indiceCorrecto` y las
-  respuestas recibidas).
-  - `startRound(code, categoria, durationSeconds)`: pide la pregunta a
-    `AiContentService` **antes** de arrancar el temporizador (constitution.md, principio
-    5), después llama `gameEngine.startRound` y recién ahí guarda el estado y emite
-    `trivia_question`.
-  - `submitAnswer(code, socketId, opcionIndex)`: identifica al jugador por
-    `client.id` (socket), nunca por un `playerId` que mande el cliente — mismo criterio
-    que `RoomGateway.handleDisconnect`. Rechaza: sin ronda activa
-    (`NoTriviaRoundError` — cubre también "llegaste tarde", porque al resolver la ronda
-    se borra el estado), socket que no es de la sala (`PlayerNotInRoomError`), índice
-    fuera de rango (`InvalidAnswerIndexError`), o segunda respuesta
-    (`AlreadyAnsweredError` — spec: "no se puede cambiar").
-  - Reloj inyectable (`now: () => number = Date.now`, `@Optional()`), mismo patrón que
-    ya usa `AiContentService` con `random` — así las pruebas son deterministas.
-  - `resolveRound` (privado): por cada jugador, `puntos = 100 + bono` si acertó (bono de
-    hasta 50, proporcional a qué tan rápido respondió dentro del tiempo total), `0` si
-    no acertó o no respondió — nunca negativo. Suma los puntos al equipo del jugador vía
-    `gameEngine.addScore`, emite `trivia_result` revelando `indiceCorrecto`, y borra el
-    estado de la ronda.
-- **`trivia.gateway.ts`**: eventos `start_trivia_round` y `submit_trivia_answer`
-  (cliente→servidor), `trivia_question` y `trivia_result` (servidor→cliente, reenviados
-  desde `trivia.events$`, igual que `game-engine.gateway.ts`). Además,
-  `trivia_answer_accepted` solo al socket que respondió (confirmación de que "quedó
-  registrada" — sin esto, el jugador no tiene ninguna señal de éxito, ya que su
-  respuesta no cambia el `room_state` que ve el resto).
-- **`trivia.module.ts`**: importa `RoomModule`, `GameEngineModule`, `AiContentModule`;
-  provee `TriviaService` + `TriviaGateway`. Se agrega a `AppModule`.
+### `trivia.types.ts`
+
+```ts
+export interface TriviaTurnResult {
+  playerId: string;
+  playerName: string;
+  teamId: string;
+  opcionElegida: number | null;
+  correcta: boolean;
+  puntos: number;
+}
+
+export type TriviaEvent =
+  | { type: 'room_state'; code: string; room: RoomState } // status/round mutados por Trivia
+  | { type: 'trivia_turn_waiting'; code: string; playerId: string; playerName: string; teamId: string }
+  | { type: 'trivia_turn_started'; code: string; targetSocketIds: string[]; playerId: string; playerName: string; pregunta: string; opciones: string[]; durationSeconds: number }
+  | { type: 'trivia_turn_update'; code: string; targetSocketIds: string[]; remainingSeconds: number }
+  | { type: 'trivia_turn_result'; code: string; pregunta: string; opciones: string[]; indiceCorrecto: number; resultado: TriviaTurnResult }
+  | { type: 'trivia_match_result'; code: string; scores: TeamScore[] };
+```
+
+`targetSocketIds` lo resuelve `TriviaService` (pantalla + jugador en turno); el
+gateway solo hace `server.to(id).emit(...)` por cada uno — ver "Cambios de wiring".
+
+### `trivia.service.ts`
+
+Estado en memoria: `Map<code, TriviaMatchState>` con
+`{ turns: TurnAssignment[], currentIndex: number, currentQuestion: {pregunta, opciones, indiceCorrecto} | null, answered: boolean, timer: RoundTimer | null }`.
+
+- **`startMatch(code)`**:
+  - `room = rooms.getRoomOrThrow(code)`.
+  - `distributeTurns(room.teams, ROUNDS_PER_PLAYER)` (de
+    `game-engine/turn-distribution.ts`) → `turns`. Si tira `NotEnoughTeamsError`, se
+    deja burbujear (menos de 2 equipos con jugadores).
+  - Si ya hay una partida en curso en esa sala → `TriviaMatchAlreadyRunningError`.
+  - `room.status = 'jugando'` (mutación directa, ver arriba).
+  - Guarda el estado inicial (`currentIndex: 0`, sin pregunta todavía) y llama a
+    `startTurn(code)`.
+  - Emite `room_state`.
+- **`startTurn(code)`** (privado): pide 1 pregunta a `aiContent.getTriviaQuestions`
+  (categoría fija) **antes** de arrancar el temporizador del turno
+  (constitution.md, principio 5), arma un nuevo `RoundTimer` con
+  `onTick → emit trivia_turn_update`, `onEnd → resolveTurn(code, null)`, y lo arranca
+  con `TRIVIA_TURN_SECONDS`. Resuelve `targetSocketIds` = socket de pantalla(s) +
+  `player.socketId` del turno actual (ver "Cambios de wiring" para cómo se identifica
+  a la pantalla). Emite `trivia_turn_waiting` (a toda la sala) y `trivia_turn_started`
+  (solo a `targetSocketIds`).
+- **`submitAnswer(code, socketId, opcionIndex)`**: identifica al jugador por
+  `socketId` (nunca por un id que mande el cliente, mismo criterio que la versión
+  anterior). Rechaza: sin partida activa (`NoTriviaMatchError`), socket que no es de la
+  sala (`PlayerNotInRoomError`), jugador que no es quien tiene el turno actual
+  (`NotYourTurnError`), índice fuera de rango (`InvalidAnswerIndexError`), turno ya
+  respondido (`AlreadyAnsweredError` — guarda contra doble tap). Si pasa validaciones:
+  detiene el timer del turno y llama a `resolveTurn(code, opcionIndex)`.
+- **`resolveTurn(code, opcionIndex)`** (privado, `opcionIndex` puede ser `null` si se
+  acabó el tiempo): calcula `correcta`/`puntos` (fijo, sin bono), llama
+  `gameEngine.addScore` si corresponde, arma `TriviaTurnResult`, emite
+  `trivia_turn_result` a toda la sala. Después, con `setTimeout` de
+  `TURN_TRANSITION_DELAY_MS` (scheduler inyectable — mismo patrón que `now` en la
+  versión anterior, para poder testear con fake timers):
+  - Si quedan turnos (`currentIndex + 1 < turns.length`): avanza el índice y llama
+    `startTurn(code)`.
+  - Si no: `finishMatch(code)` — `room.status = 'resultados'`, `room.round = null`,
+    emite `room_state` y `trivia_match_result` con el puntaje final de cada equipo
+    (mismo shape `TeamScore` que ya usa `game-engine.types.ts`), borra el estado de la
+    partida.
+
+### `trivia.gateway.ts`
+
+- Cliente → servidor: `start_trivia_game { code }` (reemplaza `start_trivia_round` —
+  ya no recibe `categoria`/`durationSeconds`, son constantes del backend ahora),
+  `submit_trivia_answer { code, opcionIndex }` (igual que antes).
+- Servidor → cliente: reenvía `trivia.events$` — `room_state` y `trivia_turn_waiting`/
+  `trivia_turn_result`/`trivia_match_result` van a `server.to(code)` (toda la sala);
+  `trivia_turn_started`/`trivia_turn_update` van target por target
+  (`event.targetSocketIds.forEach(id => server.to(id).emit(...))`). Más
+  `trivia_answer_accepted` solo al socket que respondió, igual que antes.
+
+### `trivia.module.ts`
+
+Importa `RoomModule`, `GameEngineModule`, `AiContentModule`; provee `TriviaService` +
+`TriviaGateway`. Ya está agregado a `AppModule` (de la iteración anterior, sin cambios
+de wiring ahí).
 
 ### Cambios de wiring
 
-- `game-engine.module.ts`: se agregó `exports: [GameEngineService]` — no lo exportaba
-  todavía porque hasta ahora `GameEngineGateway` era el único consumidor, dentro del
-  mismo módulo. `TriviaModule` es el primer módulo externo que necesita inyectar
-  `GameEngineService` directamente.
+- **`room.gateway.ts` → `handleWatchRoom`**: además de `client.join(room.code)`, ahora
+  también `client.join(\`${room.code}:screen\`)`. Es el único cambio a `RoomModule` que
+  pide esta tarea — necesario para poder mandarle la pregunta completa a la pantalla
+  sin mandársela también a los celulares que no están en turno (ver "Privacidad de la
+  pregunta" abajo). Pequeño y aislado, se documenta acá en vez de en
+  `game-selection/analysis.md` porque ningún otro consumidor lo necesita todavía.
+- `game-engine/turn-distribution.ts`: nuevo archivo, ver
+  `specs/features/game-selection/analysis.md` (ahí se diseña porque es utilidad
+  compartida, no de Trivia).
+
+### Privacidad de la pregunta
+
+`spec.md` pide explícitamente que los celulares que no están en turno no vean la
+pregunta — no solo que el botón esté deshabilitado. Por eso `trivia_turn_started` (con
+la pregunta completa) se manda solo a `${code}:screen` + el socket del jugador en
+turno, nunca a `server.to(code)`. El resto de los celulares reciben únicamente
+`trivia_turn_waiting` (nombre + equipo del jugador en turno, sin pregunta ni opciones)
+para poder mostrar "le toca a [nombre]" en su pantalla de espera.
+
+**Límite explícito**: esto es privacidad a nivel de qué evento recibe cada socket, no
+un mecanismo criptográfico — alguien con las devtools abiertas mirando el tráfico de
+red de su propio celular técnicamente podría inspeccionar paquetes de otros eventos
+igual (ningún socket ve el evento de otro, así que en la práctica no hay nada que
+inspeccionar del lado de un jugador que no está en turno). Está más que a la altura de
+un juego familiar presencial; no se resuelve con nada más fuerte.
 
 ## Pruebas
 
-- **`trivia.service.spec.ts`** (instanciación directa — `RoomService`/`GameEngineService`
-  reales con `vi.useFakeTimers()`, igual que `game-engine.service.spec.ts`;
-  `AiContentService` con un generador falso para tener pregunta/opciones conocidas; reloj
-  inyectado a mano): reparte la pregunta sin `indiceCorrecto`; acierta con bono alto
-  (responde rápido) y bono bajo (responde casi al límite); no responde → incorrecta, 0
-  puntos; responder dos veces → `AlreadyAnsweredError`; índice fuera de rango →
-  `InvalidAnswerIndexError`; sin ronda activa → `NoTriviaRoundError`; socket ajeno a la
-  sala → `PlayerNotInRoomError`; `end_round` genérico antes de tiempo → no puntúa y
-  limpia el estado.
-- **`test/trivia.e2e-spec.ts`** (mismo patrón que `game-engine.e2e-spec.ts`, sockets
-  reales sobre `AppModule` completo, sin `ANTHROPIC_API_KEY` en CI así que la pregunta
-  sale siempre del banco de respaldo — las pruebas no asumen cuál opción es la
-  correcta): camino feliz completo (`start_trivia_round` → `trivia_question` a pantalla y
-  jugador → `submit_trivia_answer` → `trivia_answer_accepted` → `trivia_result` con el
-  puntaje aplicado si acertó) y el caso "nadie responde a tiempo" que pide `spec.md`
-  explícitamente para esta tarea.
+- **`turn-distribution.spec.ts`**: ver `game-selection/analysis.md`.
+- **`trivia.service.spec.ts`** (instanciación directa, `RoomService`/`GameEngineService`
+  reales, `vi.useFakeTimers()`, `AiContentService` con generador falso, `random` y
+  `scheduler` inyectados a mano): arranca la partida y arma el orden de turnos
+  correcto (equipos parejos e impares, incluido el ejemplo 2/3 de `spec.md`); primer
+  turno se dirige solo a pantalla + jugador correspondiente; acierta → puntos fijos al
+  equipo; no acierta o no responde a tiempo → 0 puntos, sin negativos; responder fuera
+  de turno → `NotYourTurnError`; responder dos veces → `AlreadyAnsweredError`; índice
+  fuera de rango → `InvalidAnswerIndexError`; sin partida activa →
+  `NoTriviaMatchError`; socket ajeno a la sala → `PlayerNotInRoomError`; se agotan
+  todos los turnos → `room.status = 'resultados'` y `trivia_match_result` con el
+  puntaje final; menos de 2 equipos con jugadores → `NotEnoughTeamsError` (burbujea de
+  `distributeTurns`); pausa de `TURN_TRANSITION_DELAY_MS` entre turnos (con el
+  scheduler falso, se verifica que el siguiente turno no arranca antes de tiempo).
+- **`test/trivia.e2e-spec.ts`** (sockets reales sobre `AppModule` completo, sin
+  `ANTHROPIC_API_KEY` en CI): camino feliz de una partida corta (2 equipos de 1
+  jugador cada uno, para no depender de temporizadores largos en CI) — `select_game` →
+  `start_trivia_game` → el socket del jugador en turno recibe `trivia_turn_started`
+  con la pregunta, el otro socket NO la recibe (solo `trivia_turn_waiting`) →
+  `submit_trivia_answer` → `trivia_answer_accepted` → `trivia_turn_result` a ambos →
+  se repite para el segundo jugador → `trivia_match_result` final. Y el caso "nadie
+  responde a tiempo" (timer llega a cero sin `submit_trivia_answer`).
 
 ## Checklist manual
 
-No aplica — tarea de puro backend sin ninguna UI conectada todavía (excepción explícita
-de `testing-strategy.md`), igual que `ai-content-trivia`. La próxima tarea
-("Componentes de pantalla y control para Trivia") es la que conecta esto a `/screen` y
-`/play`, y ahí sí aplica el checklist completo.
+No aplica — tarea de puro backend sin ninguna UI conectada todavía (excepción
+explícita de `testing-strategy.md`). La tarea siguiente
+(`specs/features/trivia-ui/analysis.md`) conecta esto a `/screen` y `/play`.

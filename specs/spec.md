@@ -85,6 +85,20 @@ La pantalla compartida (TV/iPad/computadora) es también el panel del host — e
 - **Given** el jugador ya unido esperando en el lobby, **when** el host lo asigna a un equipo, **then** la vista refleja el equipo (nombre y color) sin necesidad de recargar.
 - **Given** el jugador ya unido esperando en el lobby, **when** cierra la pestaña o se corta el WebSocket, **then** se remueve de la sala (mismo comportamiento ya cubierto por "Motor de sala" — aplica también a esta vista).
 
+### Selección y arranque de juego
+
+Tras armar equipos, el host arranca la partida eligiendo un minijuego de una lista — no se entra directo a un juego fijo. Esta vista es la base reutilizable para elegir juego entre rondas (Fase 4 la extiende para el caso de "ya hubo una partida antes, elegir la siguiente sin recrear la sala").
+
+- **Given** una sala en `lobby` con al menos un equipo que tiene integrantes, **when** el host presiona "Iniciar partida" en `/screen`, **then** se muestra el panel de selección de juegos con los juegos disponibles.
+- **Given** ningún equipo tiene integrantes todavía, **when** el host intenta iniciar partida, **then** no puede — la opción permanece deshabilitada hasta que al menos un equipo tenga jugadores.
+- **Given** el panel de selección de juegos, **when** el host elige uno de la lista, **then** la pantalla y el celular de cada jugador pasan a la vista de ese juego, sin necesidad de recargar ninguno de los dos.
+
+### Reparto de turnos entre jugadores de un equipo
+
+Regla compartida para cualquier minijuego que reparta turnos individuales entre los integrantes de un equipo (ej. Trivia) — se documenta una sola vez acá porque aplica igual a cualquier minijuego futuro con el mismo patrón, no solo a Trivia.
+
+- **Given** una cantidad de rondas configurada para el juego y equipos de distinto tamaño, **when** arranca la partida, **then** el total de turnos de cada equipo es "rondas × tamaño del equipo más grande", y ese total se reparte lo más parejo posible entre los integrantes de ese equipo (ningún jugador del equipo tiene dos turnos más que otro compañero de su mismo equipo).
+
 ## Contenido de IA — Trivia
 
 `AiContentModule.getTriviaQuestions(categoria)` genera las preguntas de Trivia (ver
@@ -127,10 +141,14 @@ Un jugador dibuja en su celular/tablet una palabra; el resto ve el trazo en vivo
 - **Given** el equipo contrario o el propio equipo (según variante) adivinando, **when** alguien acierta la palabra antes del tiempo límite, **then** se otorgan puntos según qué tan rápido se acertó.
 
 ### 4. Trivia / Preguntados
-Preguntas de cultura general por categorías; cada jugador responde desde su celular.
+Preguntas de cultura general por categorías, por turnos individuales: en cada turno responde un solo jugador mientras el resto espera, alternando entre equipos. Usa el reparto de turnos compartido ("Reparto de turnos entre jugadores de un equipo", en "Motor de sala") con 3 rondas por defecto.
 
-- **Given** una pregunta con 4 opciones mostrada en pantalla y en el celular de cada jugador, **when** un jugador selecciona una opción antes del tiempo límite, **then** su respuesta queda registrada una sola vez (no se puede cambiar) y se le otorgan puntos si es correcta, con bono por rapidez.
-- **Given** el temporizador de la pregunta llega a cero, **when** algún jugador no respondió, **then** se cuenta como incorrecta y no penaliza puntos negativos.
+- **Given** la partida de Trivia recién elegida desde el panel de selección de juego, **when** arranca, **then** el sistema elige al azar qué equipo empieza y qué integrante de ese equipo tiene el primer turno.
+- **Given** el turno de un jugador, **when** le toca responder, **then** la pantalla muestra su nombre, la pregunta y las 4 opciones, y su celular muestra la misma pregunta con las mismas 4 opciones; los celulares del resto de los jugadores permanecen en espera, sin mostrar la pregunta.
+- **Given** el turno de un jugador, **when** selecciona una opción dentro del tiempo límite del turno, **then** su respuesta queda registrada una sola vez (no se puede cambiar), se otorgan puntos fijos a su equipo si es correcta (sin bono por rapidez), y se muestra el resultado en pantalla con una animación y un sonido de acierto o error reproducido desde el dispositivo del host, con una pausa de 2 a 3 segundos antes de continuar.
+- **Given** el turno de un jugador, **when** el tiempo límite del turno llega a cero sin que responda, **then** se cuenta como incorrecta, no se otorgan puntos ni se penaliza con puntos negativos, y se sigue la misma pausa y sonido de "incorrecta" antes de continuar.
+- **Given** un turno recién resuelto, **when** termina la pausa, **then** le toca el turno al integrante correspondiente del equipo contrario, según el reparto de turnos de la partida.
+- **Given** todos los turnos repartidos de ambos equipos ya jugados, **when** eso ocurre, **then** la partida de Trivia pasa a resultados con el puntaje final de cada equipo.
 
 ### 5. Rosco de palabras (estilo Pasapalabra)
 Preguntas ordenadas por letra del abecedario; se puede pasar y volver.
@@ -162,6 +180,13 @@ Se da una categoría; cada equipo dice una palabra relacionada y presiona un bot
 - **Given** una categoría activa y el equipo A en posesión del turno con su temporizador corriendo, **when** alguien del equipo A dice una palabra válida (no repetida) y presiona el botón, **then** el temporizador del equipo A se detiene y arranca el del equipo B.
 - **Given** el temporizador de un equipo llega a cero, **when** eso ocurre, **then** ese equipo pierde la ronda y el equipo contrario gana los puntos.
 - **Given** una palabra ya dicha en la ronda, **when** algún jugador repite esa misma palabra, **then** no se acepta como válida y el temporizador de su equipo sigue corriendo.
+
+### 10. Memoriza los objetos en la imagen
+
+_Pendiente: Kalin agrega acá el requerimiento — descripción del juego, reglas y cómo
+funciona. Sin esto, no se escribe `specs/features/<juego>/analysis.md` ni se empieza
+la tarea correspondiente en Fase 3 de `tasks.md` (regla de `CLAUDE.md`: todo requisito
+nace como criterio de aceptación verificable)._
 
 ## Fuera de alcance (ver constitution.md)
 
