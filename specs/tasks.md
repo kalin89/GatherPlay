@@ -52,6 +52,7 @@ Cada una de estas ocho tareas incluye: módulo backend, componentes de pantalla/
 - [ ] Marcador acumulado visible entre minijuegos.
 - [ ] Manejo de reconexión (un jugador pierde señal y vuelve a entrar con el mismo código sin perder su lugar en el equipo).
 - [ ] Persistir preguntas generadas por IA en `content_banks` (Postgres) para reusarlas y como respaldo creciente. Depende de: `specs/features/ai-content-trivia/analysis.md`.
+- [ ] Limpieza de salas abandonadas: hoy una sala nunca se borra del `Map` en memoria de `RoomModule` — ni cuando el host se desconecta (no se detecta, no es un `Player`) ni cuando se van todos los jugadores. Definir un criterio de expiración/limpieza (ej. TTL de inactividad) para no acumular estado indefinidamente en el proceso.
 
 ## Explícitamente no en el backlog de v1
 
