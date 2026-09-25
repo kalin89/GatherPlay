@@ -8,11 +8,13 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import {
+  GameAlreadyStartedError,
   NoTeamsError,
   PlayerNotFoundError,
   RoomNotFoundError,
   RoomService,
   TeamNotFoundError,
+  UnknownGameError,
 } from './room.service.js';
 
 interface JoinRoomPayload {
@@ -43,6 +45,11 @@ interface RemoveTeamPayload {
 
 interface WatchRoomPayload {
   code: string;
+}
+
+interface SelectGamePayload {
+  code: string;
+  gameId: string;
 }
 
 @WebSocketGateway({ cors: { origin: '*' } })
@@ -154,6 +161,27 @@ export class RoomGateway implements OnGatewayDisconnect {
       this.server.to(room.code).emit('room_state', room);
     } catch (error) {
       if (error instanceof RoomNotFoundError || error instanceof NoTeamsError) {
+        client.emit('error', { message: error.message });
+        return;
+      }
+      throw error;
+    }
+  }
+
+  @SubscribeMessage('select_game')
+  handleSelectGame(
+    @MessageBody() payload: SelectGamePayload,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const room = this.roomService.selectGame(payload.code, payload.gameId);
+      this.server.to(room.code).emit('room_state', room);
+    } catch (error) {
+      if (
+        error instanceof RoomNotFoundError ||
+        error instanceof GameAlreadyStartedError ||
+        error instanceof UnknownGameError
+      ) {
         client.emit('error', { message: error.message });
         return;
       }

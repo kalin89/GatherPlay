@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type { Player, RoomState, Team } from './room.types.js';
+import { GAME_IDS, type GameId, type Player, type RoomState, type Team } from './room.types.js';
 
 // Sin 0/O ni 1/I — se leen y se dictan en voz alta entre celular y pantalla.
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -34,6 +34,20 @@ export class NoTeamsError extends Error {
   }
 }
 
+export class GameAlreadyStartedError extends Error {
+  constructor(code: string) {
+    super(`La sala ${code} ya tiene un juego elegido`);
+    this.name = 'GameAlreadyStartedError';
+  }
+}
+
+export class UnknownGameError extends Error {
+  constructor(gameId: string) {
+    super(`No existe un juego con el id ${gameId}`);
+    this.name = 'UnknownGameError';
+  }
+}
+
 @Injectable()
 export class RoomService {
   private readonly rooms = new Map<string, RoomState>();
@@ -46,6 +60,7 @@ export class RoomService {
       players: [],
       teams: [],
       round: null,
+      currentGame: null,
     };
     this.rooms.set(code, room);
     return room;
@@ -140,6 +155,18 @@ export class RoomService {
       const team = room.teams[index % room.teams.length];
       team.playerIds.push(player.id);
     });
+    return room;
+  }
+
+  selectGame(code: string, gameId: string): RoomState {
+    const room = this.getRoomOrThrow(code);
+    if (room.currentGame !== null) {
+      throw new GameAlreadyStartedError(code);
+    }
+    if (!GAME_IDS.includes(gameId as GameId)) {
+      throw new UnknownGameError(gameId);
+    }
+    room.currentGame = gameId as GameId;
     return room;
   }
 

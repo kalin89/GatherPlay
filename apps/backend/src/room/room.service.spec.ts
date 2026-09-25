@@ -1,9 +1,11 @@
 import {
+  GameAlreadyStartedError,
   NoTeamsError,
   PlayerNotFoundError,
   RoomNotFoundError,
   RoomService,
   TeamNotFoundError,
+  UnknownGameError,
 } from './room.service.js';
 
 describe('RoomService', () => {
@@ -20,6 +22,7 @@ describe('RoomService', () => {
     expect(room.status).toBe('lobby');
     expect(room.players).toEqual([]);
     expect(room.teams).toEqual([]);
+    expect(room.currentGame).toBeNull();
   });
 
   it('genera códigos distintos para salas distintas', () => {
@@ -208,6 +211,39 @@ describe('RoomService', () => {
     it('lanza RoomNotFoundError al eliminar un equipo en una sala inexistente', () => {
       expect(() => service.removeTeam('ZZZZZ', 'inexistente')).toThrow(
         RoomNotFoundError,
+      );
+    });
+  });
+
+  describe('selección de juego', () => {
+    it('guarda el juego elegido', () => {
+      const room = service.createRoom();
+
+      const updated = service.selectGame(room.code, 'trivia');
+
+      expect(updated.currentGame).toBe('trivia');
+    });
+
+    it('lanza RoomNotFoundError al elegir juego en una sala inexistente', () => {
+      expect(() => service.selectGame('ZZZZZ', 'trivia')).toThrow(
+        RoomNotFoundError,
+      );
+    });
+
+    it('lanza UnknownGameError si el id de juego no existe', () => {
+      const room = service.createRoom();
+
+      expect(() => service.selectGame(room.code, 'inexistente')).toThrow(
+        UnknownGameError,
+      );
+    });
+
+    it('lanza GameAlreadyStartedError si ya se eligió un juego antes', () => {
+      const room = service.createRoom();
+      service.selectGame(room.code, 'trivia');
+
+      expect(() => service.selectGame(room.code, 'trivia')).toThrow(
+        GameAlreadyStartedError,
       );
     });
   });

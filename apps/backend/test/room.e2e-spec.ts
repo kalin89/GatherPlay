@@ -363,4 +363,41 @@ describe('RoomGateway (e2e)', () => {
     const error = await errorPromise;
     expect(error.message).toBeTruthy();
   });
+
+  it('el host elige un juego y la sala (incluida la pantalla) ve el estado actualizado', async () => {
+    const host = connect();
+    const roomCreated = waitFor<RoomState>(host, 'room_state');
+    host.on('connect', () => host.emit('create_room'));
+    const room = await roomCreated;
+
+    const screen = connect();
+    const watched = waitFor<RoomState>(screen, 'room_state');
+    screen.on('connect', () => screen.emit('watch_room', { code: room.code }));
+    await watched;
+
+    const hostSeesSelection = waitFor<RoomState>(host, 'room_state');
+    const screenSeesSelection = waitFor<RoomState>(screen, 'room_state');
+    host.emit('select_game', { code: room.code, gameId: 'trivia' });
+
+    const [hostState, screenState] = await Promise.all([
+      hostSeesSelection,
+      screenSeesSelection,
+    ]);
+
+    expect(hostState.currentGame).toBe('trivia');
+    expect(screenState.currentGame).toBe('trivia');
+  });
+
+  it('devuelve un error al elegir un juego que no existe', async () => {
+    const host = connect();
+    const roomCreated = waitFor<RoomState>(host, 'room_state');
+    host.on('connect', () => host.emit('create_room'));
+    const room = await roomCreated;
+
+    const errorPromise = waitFor<{ message: string }>(host, 'error');
+    host.emit('select_game', { code: room.code, gameId: 'inexistente' });
+
+    const error = await errorPromise;
+    expect(error.message).toBeTruthy();
+  });
 });

@@ -77,11 +77,15 @@ export interface TurnAssignment {
 }
 
 export function distributeTurns(
-  teams: { teamId: string; playerIds: string[] }[],
+  teams: { id: string; playerIds: string[] }[],
   roundsPerPlayer: number,
   random: () => number = Math.random,
 ): TurnAssignment[]
 ```
+
+(`{ id, playerIds }` en vez de `{ teamId, playerIds }` para que Trivia pueda pasar
+`room.teams` directo, sin mapear — es la forma de `Team` en `room.types.ts`. La salida
+sigue usando `teamId`.)
 
 - Filtra a los equipos con al menos un jugador (`playerIds.length > 0`). Con menos de 2
   equipos participantes, no hay forma de alternar — lanza `NotEnoughTeamsError` (se
