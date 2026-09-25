@@ -11,6 +11,7 @@ function makeRoom(overrides: Partial<RoomState> = {}): RoomState {
     players: [],
     teams: [],
     round: null,
+    currentGame: null,
     ...overrides,
   };
 }
@@ -21,6 +22,7 @@ function makeActions(overrides: Partial<RoomActions> = {}): RoomActions {
     removeTeam: vi.fn(),
     assignPlayerToTeam: vi.fn(),
     randomizeTeams: vi.fn(),
+    selectGame: vi.fn(),
     ...overrides,
   };
 }

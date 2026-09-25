@@ -24,10 +24,14 @@ export interface RoundState {
   remainingSeconds: number;
 }
 
+export const GAME_IDS = ["trivia"] as const;
+export type GameId = (typeof GAME_IDS)[number];
+
 export interface RoomState {
   code: string;
   status: RoomStatus;
   players: Player[];
   teams: Team[];
   round: RoundState | null;
+  currentGame: GameId | null;
 }

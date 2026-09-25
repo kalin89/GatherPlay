@@ -68,6 +68,7 @@ describe("CreateRoomButton", () => {
       players: [],
       teams: [],
       round: null,
+      currentGame: null,
     });
 
     await waitFor(() => {

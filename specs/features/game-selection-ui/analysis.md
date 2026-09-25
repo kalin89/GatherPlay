@@ -95,9 +95,9 @@ necesita que el backend permita volver a `currentGame = null` (fuera del alcance
 
 Aplica el checklist completo de `testing-strategy.md`, más:
 
-- [ ] Botón "Iniciar partida" deshabilitado se ve claramente distinto al habilitado
+- [x] Botón "Iniciar partida" deshabilitado se ve claramente distinto al habilitado
       (legible a distancia en la TV).
-- [ ] Con un solo juego en el catálogo (Trivia), el panel no se ve vacío/raro — vale la
+- [x] Con un solo juego en el catálogo (Trivia), el panel no se ve vacío/raro — vale la
       pena revisar el diseño con un solo botón antes de que existan más juegos.
-- [ ] `/play` mientras se está eligiendo el juego no queda en una pantalla confusa o en
+- [x] `/play` mientras se está eligiendo el juego no queda en una pantalla confusa o en
       blanco.

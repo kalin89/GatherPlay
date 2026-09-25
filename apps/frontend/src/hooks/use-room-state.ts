@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
 import { createSocket } from "@/lib/socket";
-import type { RoomState } from "@/lib/room-types";
+import type { GameId, RoomState } from "@/lib/room-types";
 
 interface RoomError {
   message: string;
@@ -14,6 +14,7 @@ export interface RoomActions {
   removeTeam: (teamId: string) => void;
   assignPlayerToTeam: (playerId: string, teamId: string) => void;
   randomizeTeams: () => void;
+  selectGame: (gameId: GameId) => void;
 }
 
 export interface UseRoomStateResult {
@@ -103,11 +104,24 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
     socketRef.current?.emit("randomize_teams", { code: roomCode });
   }, [roomCode]);
 
+  const selectGame = useCallback(
+    (gameId: GameId) => {
+      socketRef.current?.emit("select_game", { code: roomCode, gameId });
+    },
+    [roomCode],
+  );
+
   return {
     state,
     error,
     actionError,
     connecting,
-    actions: { createTeam, removeTeam, assignPlayerToTeam, randomizeTeams },
+    actions: {
+      createTeam,
+      removeTeam,
+      assignPlayerToTeam,
+      randomizeTeams,
+      selectGame,
+    },
   };
 }

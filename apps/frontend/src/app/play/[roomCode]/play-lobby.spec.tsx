@@ -50,6 +50,7 @@ function makeRoom(overrides: Partial<RoomState> = {}): RoomState {
     players: [],
     teams: [],
     round: null,
+    currentGame: null,
     ...overrides,
   };
 }
@@ -98,7 +99,7 @@ describe("PlayLobby", () => {
     });
   });
 
-  it("muestra el equipo propio una vez asignado", async () => {
+  it("muestra el equipo propio y espera la elección del juego", async () => {
     render(<PlayLobby roomCode="ABCDE" />);
 
     fireEvent.change(screen.getByPlaceholderText("Tu nombre"), {
@@ -117,6 +118,31 @@ describe("PlayLobby", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Rojos")).toBeInTheDocument();
+      expect(screen.getByText(/esperando a que el anfitrión elija el juego/i)).toBeInTheDocument();
+    });
+  });
+
+  it("con un juego elegido, muestra el control de ese juego en vez del equipo", async () => {
+    render(<PlayLobby roomCode="ABCDE" />);
+
+    fireEvent.change(screen.getByPlaceholderText("Tu nombre"), {
+      target: { value: "Ana" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /unirme/i }));
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(
+      makeRoom({
+        currentGame: "trivia",
+        players: [{ id: "p1", name: "Ana", socketId: "socket-1" }],
+        teams: [
+          { id: "t1", name: "Rojos", color: "#ff0000", playerIds: ["p1"], score: 0 },
+        ],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/preparando trivia/i)).toBeInTheDocument();
+      expect(screen.queryByText("Rojos")).not.toBeInTheDocument();
     });
   });
 

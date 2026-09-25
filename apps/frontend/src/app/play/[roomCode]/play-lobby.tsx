@@ -1,12 +1,26 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { useJoinRoom } from "@/hooks/use-join-room";
 import { splitPlayersByTeam } from "@/lib/room-selectors";
+import { getGameLabel } from "@/lib/game-catalog";
+import type { GameId } from "@/lib/room-types";
 import { TeamBoard } from "@/components/team-board";
 import styles from "./play-lobby.module.css";
 
 const MAX_NAME_LENGTH = 20;
+
+// Mismo criterio que `renderGameScreen` en screen-lobby.tsx: único lugar que
+// sabe qué juegos tienen de verdad un control propio implementado. Se agrega
+// un caso acá cuando exista `PlayTrivia` (specs/features/trivia-ui/analysis.md).
+function renderGameControl(gameId: GameId): ReactNode {
+  switch (gameId) {
+    default:
+      return (
+        <p className={styles.message}>Preparando {getGameLabel(gameId)}…</p>
+      );
+  }
+}
 
 export function PlayLobby({ roomCode }: { roomCode: string }) {
   const { status, state, error, playerId, join } = useJoinRoom(roomCode);
@@ -39,7 +53,16 @@ export function PlayLobby({ roomCode }: { roomCode: string }) {
           ¡Listo, <strong>{trimmedName}</strong>!
         </p>
         {myTeam ? (
-          <TeamBoard team={myTeam.team} players={myTeam.players} />
+          state.currentGame !== null ? (
+            renderGameControl(state.currentGame)
+          ) : (
+            <>
+              <TeamBoard team={myTeam.team} players={myTeam.players} />
+              <p className={styles.message}>
+                Esperando a que el anfitrión elija el juego…
+              </p>
+            </>
+          )
         ) : (
           <p className={styles.message}>
             Esperando a que el anfitrión arme los equipos…

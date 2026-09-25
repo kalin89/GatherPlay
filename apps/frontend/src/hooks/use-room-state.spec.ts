@@ -49,6 +49,7 @@ function makeRoom(overrides: Partial<RoomState> = {}): RoomState {
     players: [],
     teams: [],
     round: null,
+    currentGame: null,
     ...overrides,
   };
 }
@@ -100,6 +101,17 @@ describe("useRoomState", () => {
     expect(lastSocket?.emitted).toContainEqual({
       event: "randomize_teams",
       payload: { code: "ABCDE" },
+    });
+  });
+
+  it("selectGame emite select_game con el código de sala", () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    act(() => result.current.actions.selectGame("trivia"));
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "select_game",
+      payload: { code: "ABCDE", gameId: "trivia" },
     });
   });
 

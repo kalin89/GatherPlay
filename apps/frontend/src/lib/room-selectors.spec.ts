@@ -9,6 +9,7 @@ function makeRoom(overrides: Partial<RoomState> = {}): RoomState {
     players: [],
     teams: [],
     round: null,
+    currentGame: null,
     ...overrides,
   };
 }

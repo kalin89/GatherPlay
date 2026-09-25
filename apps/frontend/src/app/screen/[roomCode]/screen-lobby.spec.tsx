@@ -52,6 +52,7 @@ function makeRoom(overrides: Partial<RoomState> = {}): RoomState {
     players: [],
     teams: [],
     round: null,
+    currentGame: null,
     ...overrides,
   };
 }
@@ -188,6 +189,76 @@ describe("ScreenLobby", () => {
     expect(lastSocket?.emitted).toContainEqual({
       event: "create_team",
       payload: { code: "ABCDE", name: "Rojos", color: expect.any(String) },
+    });
+  });
+
+  it("el botón de iniciar partida está deshabilitado si ningún equipo tiene jugadores", async () => {
+    render(<ScreenLobby roomCode="ABCDE" />);
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(
+      makeRoom({
+        teams: [{ id: "t1", name: "Rojos", color: "#ef4444", playerIds: [], score: 0 }],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /iniciar partida/i }),
+      ).toBeDisabled();
+    });
+  });
+
+  it("el botón de iniciar partida se habilita con al menos un jugador en un equipo", async () => {
+    render(<ScreenLobby roomCode="ABCDE" />);
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(
+      makeRoom({
+        players: [{ id: "p1", name: "Ana", socketId: "s1" }],
+        teams: [{ id: "t1", name: "Rojos", color: "#ef4444", playerIds: ["p1"], score: 0 }],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /iniciar partida/i }),
+      ).toBeEnabled();
+    });
+  });
+
+  it("iniciar partida muestra el panel de selección, y elegir un juego emite select_game", async () => {
+    render(<ScreenLobby roomCode="ABCDE" />);
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(
+      makeRoom({
+        players: [{ id: "p1", name: "Ana", socketId: "s1" }],
+        teams: [{ id: "t1", name: "Rojos", color: "#ef4444", playerIds: ["p1"], score: 0 }],
+      }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /iniciar partida/i })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /iniciar partida/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Elegí un juego")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /trivia/i }));
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "select_game",
+      payload: { code: "ABCDE", gameId: "trivia" },
+    });
+  });
+
+  it("con un juego elegido, muestra la pantalla de ese juego en vez del lobby", async () => {
+    render(<ScreenLobby roomCode="ABCDE" />);
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(makeRoom({ currentGame: "trivia" }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/preparando trivia/i)).toBeInTheDocument();
+      expect(screen.queryByPlaceholderText("Nombre del equipo")).not.toBeInTheDocument();
     });
   });
 });
