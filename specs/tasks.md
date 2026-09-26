@@ -39,9 +39,9 @@ Se implementa Trivia primero porque es el más simple de validar (no depende de 
 - [x] `AiContentModule.getGestureWords(cantidad, excluir)` para Mímica / Caras y Gestos. Ver `specs/features/ai-content-gestos/analysis.md`.
 - [x] `CarasYGestosModule` (backend): turnos individuales de 1 minuto con 5 palabras por turno, botón "Iniciar" antes de arrancar el temporizador, palabra visible solo en la pantalla compartida (nunca en ningún celular), puntaje por palabra adivinada. Depende de: `specs/features/ai-content-gestos/analysis.md` y `specs/features/game-selection/analysis.md` (reparto de turnos). Ver `specs/features/caras-y-gestos-module/analysis.md`.
 - [ ] Componentes de pantalla y control para Mímica / Caras y Gestos (frontend): botón "Iniciar" en el celular del actor, palabra + tiempo + progreso en pantalla, botones "Adivinada"/"Paso" en el celular del actor sin la palabra, sonidos de acierto/paso/victoria desde el dispositivo del host, resumen final con palabras adivinadas por equipo. Depende de: `specs/features/caras-y-gestos-module/analysis.md` y `specs/features/game-selection-ui/analysis.md`. Ver `specs/features/caras-y-gestos-ui/analysis.md`. Código y pruebas automatizadas en verde — falta la checklist manual completa de `specs/features/caras-y-gestos-ui/analysis.md`.
-- [ ] Adivina la palabra: generación de palabras con dedup por sala mientras la sala
+- [x] Adivina la palabra: generación de palabras con dedup por sala mientras la sala
       exista. Ver `specs/features/ai-content-adivina-palabra/analysis.md`.
-- [ ] Adivina la palabra (backend): turnos de 30s por integrante alternando equipos
+- [x] Adivina la palabra (backend): turnos de 30s por integrante alternando equipos
       (reusa `distributeTurns`), pool de palabras de toda la partida (no por turno),
       límite de 3 "Paso", resumen verde/rojo por turno y resultado final de la
       partida. Depende de: `specs/features/ai-content-adivina-palabra/analysis.md` y
@@ -53,7 +53,9 @@ Se implementa Trivia primero porque es el más simple de validar (no depende de 
       sonido de victoria nuevo. Depende de:
       `specs/features/adivina-palabra-module/analysis.md` y
       `specs/features/game-selection-ui/analysis.md`. Ver
-      `specs/features/adivina-palabra-ui/analysis.md`.
+      `specs/features/adivina-palabra-ui/analysis.md`. Código y pruebas automatizadas
+      en verde — falta la checklist manual (`testing-strategy.md` + la propia de
+      `adivina-palabra-ui/analysis.md`).
 - [ ] Tararea y Adivina (requiere manejo de audio en el celular del jugador que tararea)
 - [ ] Dibuja y Adivina (requiere lienzo con trazos en tiempo real, más carga de red que los demás)
 - [ ] Rosco de palabras
@@ -67,10 +69,10 @@ Cada una de estas nueve tareas incluye: módulo backend, componentes de pantalla
 
 ## Fase 4 — Pulido de sesión completa
 
-- [ ] Selector de "siguiente juego" entre ronda y ronda, sin tener que recrear la sala. (El panel para elegir el primer juego, tras armar equipos, ya se construye en Fase 2 — esta tarea es reutilizar/extender esa misma base para la transición entre partidas sucesivas.)
-- [ ] Marcador acumulado visible entre minijuegos.
+- [x] Selector de "siguiente juego" entre ronda y ronda, sin tener que recrear la sala. (El panel para elegir el primer juego, tras armar equipos, ya se construye en Fase 2 — esta tarea es reutilizar/extender esa misma base para la transición entre partidas sucesivas.)
+- [x] Marcador acumulado visible entre minijuegos.
 - [ ] Manejo de reconexión (un jugador pierde señal y vuelve a entrar con el mismo código sin perder su lugar en el equipo).
-- [ ] Persistir preguntas generadas por IA en `content_banks` (Postgres) para reusarlas y como respaldo creciente. Depende de: `specs/features/ai-content-trivia/analysis.md`.
+- [x] Persistir preguntas generadas por IA en `content_banks` (Postgres) para reusarlas y como respaldo creciente. Depende de: `specs/features/ai-content-trivia/analysis.md`.
 - [ ] Limpieza de salas abandonadas: hoy una sala nunca se borra del `Map` en memoria de `RoomModule` — ni cuando el host se desconecta (no se detecta, no es un `Player`) ni cuando se van todos los jugadores. Definir un criterio de expiración/limpieza (ej. TTL de inactividad) para no acumular estado indefinidamente en el proceso.
 
 ## Explícitamente no en el backlog de v1

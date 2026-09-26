@@ -7,9 +7,17 @@ import { GameEngineModule } from './game-engine/game-engine.module.js';
 import { AiContentModule } from './ai-content/ai-content.module.js';
 import { TriviaModule } from './trivia/trivia.module.js';
 import { CarasYGestosModule } from './caras-y-gestos/caras-y-gestos.module.js';
+import { AdivinaPalabraModule } from './adivina-palabra/adivina-palabra.module.js';
 
 @Module({
-  imports: [RoomModule, GameEngineModule, AiContentModule, TriviaModule, CarasYGestosModule],
+  imports: [
+    RoomModule,
+    GameEngineModule,
+    AiContentModule,
+    TriviaModule,
+    CarasYGestosModule,
+    AdivinaPalabraModule,
+  ],
   controllers: [AppController],
   providers: [AppService, AppGateway],
 })

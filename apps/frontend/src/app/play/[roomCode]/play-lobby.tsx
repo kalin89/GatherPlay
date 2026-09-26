@@ -7,9 +7,11 @@ import { getGameLabel } from "@/lib/game-catalog";
 import type { GameId, RoomState } from "@/lib/room-types";
 import type { TriviaMatchView } from "@/lib/trivia-match";
 import type { GestosMatchView } from "@/lib/gestos-match";
+import type { AdivinaPalabraView } from "@/lib/adivina-palabra-match";
 import { TeamBoard } from "@/components/team-board";
 import { PlayTrivia } from "./play-trivia";
 import { PlayGestos } from "./play-gestos";
+import { PlayAdivinaPalabra } from "./play-adivina-palabra";
 import styles from "./play-lobby.module.css";
 
 const MAX_NAME_LENGTH = 20;
@@ -25,6 +27,10 @@ function renderGameControl(
   gestos: GestosMatchView,
   startGestosTurn: () => void,
   markGestureWord: (resultado: "adivinada" | "paso") => void,
+  adivinaPalabra: AdivinaPalabraView,
+  markAdivinaReady: () => void,
+  markAdivinaGuess: () => void,
+  markAdivinaPass: () => void,
   actionError: { message: string } | null,
 ): ReactNode {
   switch (gameId) {
@@ -49,6 +55,18 @@ function renderGameControl(
           actionError={actionError}
         />
       );
+    case "adivina-palabra":
+      return (
+        <PlayAdivinaPalabra
+          state={state}
+          playerId={playerId}
+          adivinaPalabra={adivinaPalabra}
+          markAdivinaReady={markAdivinaReady}
+          markAdivinaGuess={markAdivinaGuess}
+          markAdivinaPass={markAdivinaPass}
+          actionError={actionError}
+        />
+      );
     default:
       return (
         <main className={styles.page}>
@@ -67,10 +85,14 @@ export function PlayLobby({ roomCode }: { roomCode: string }) {
     playerId,
     trivia,
     gestos,
+    adivinaPalabra,
     join,
     submitAnswer,
     startGestosTurn,
     markGestureWord,
+    markAdivinaReady,
+    markAdivinaGuess,
+    markAdivinaPass,
   } = useJoinRoom(roomCode);
   const [name, setName] = useState("");
 
@@ -102,6 +124,10 @@ export function PlayLobby({ roomCode }: { roomCode: string }) {
         gestos,
         startGestosTurn,
         markGestureWord,
+        adivinaPalabra,
+        markAdivinaReady,
+        markAdivinaGuess,
+        markAdivinaPass,
         actionError,
       );
     }

@@ -17,6 +17,12 @@ import {
   type GestosAction,
   type GestosMatchView,
 } from "@/lib/gestos-match";
+import {
+  adivinaPalabraReducer,
+  initialAdivinaPalabraMatchView,
+  subscribeToAdivinaPalabra,
+  type AdivinaPalabraView,
+} from "@/lib/adivina-palabra-match";
 
 interface RoomError {
   message: string;
@@ -30,6 +36,7 @@ export interface RoomActions {
   selectGame: (gameId: GameId) => void;
   startTriviaGame: () => void;
   startGestosGame: () => void;
+  startAdivinaPalabraGame: () => void;
 }
 
 export interface UseRoomStateResult {
@@ -50,6 +57,7 @@ export interface UseRoomStateResult {
    * pantalla no es un jugador), así que `gestos_turn_waiting` siempre cae en
    * `waiting_turn`, nunca en `ready_to_start`. */
   gestos: GestosMatchView;
+  adivinaPalabra: AdivinaPalabraView;
 }
 
 // Se suscribe a una sala como espectador (vía `watch_room`, sin registrarse
@@ -71,6 +79,10 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
     (state: GestosMatchView, action: GestosAction) => gestosReducer(state, action, null),
     initialGestosMatchView,
   );
+  const [adivinaPalabra, dispatchAdivinaPalabra] = useReducer(
+    adivinaPalabraReducer,
+    initialAdivinaPalabraMatchView,
+  );
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
@@ -79,6 +91,7 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
     socketRef.current = socket;
     const unsubscribeTrivia = subscribeToTrivia(socket, dispatchTrivia);
     const unsubscribeGestos = subscribeToGestos(socket, dispatchGestos);
+    const unsubscribeAdivinaPalabra = subscribeToAdivinaPalabra(socket, dispatchAdivinaPalabra);
 
     socket.on("connect", () => {
       socket.emit("watch_room", { code: roomCode });
@@ -95,6 +108,7 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
       if (room.currentGame === null) {
         dispatchTrivia({ type: "reset" });
         dispatchGestos({ type: "reset" });
+        dispatchAdivinaPalabra({ type: "reset" });
       }
     });
 
@@ -110,6 +124,7 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
     return () => {
       unsubscribeTrivia();
       unsubscribeGestos();
+      unsubscribeAdivinaPalabra();
       socket.disconnect();
       socketRef.current = null;
     };
@@ -155,6 +170,10 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
     socketRef.current?.emit("start_gestos_game", { code: roomCode });
   }, [roomCode]);
 
+  const startAdivinaPalabraGame = useCallback(() => {
+    socketRef.current?.emit("start_adivina_palabra_game", { code: roomCode });
+  }, [roomCode]);
+
   return {
     state,
     error,
@@ -162,6 +181,7 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
     connecting,
     trivia,
     gestos,
+    adivinaPalabra,
     actions: {
       createTeam,
       removeTeam,
@@ -170,6 +190,7 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
       selectGame,
       startTriviaGame,
       startGestosGame,
+      startAdivinaPalabraGame,
     },
   };
 }

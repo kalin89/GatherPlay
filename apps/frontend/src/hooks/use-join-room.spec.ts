@@ -361,4 +361,120 @@ describe("useJoinRoom", () => {
       expect(result.current.gestos).toEqual({ phase: "idle" });
     });
   });
+
+  it("markAdivinaReady emite adivina_ready con el código en mayúsculas", () => {
+    const { result } = renderHook(() => useJoinRoom("abcde"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() => result.current.markAdivinaReady());
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "adivina_ready",
+      payload: { code: "ABCDE" },
+    });
+  });
+
+  it("markAdivinaGuess emite adivina_guess con el código en mayúsculas", () => {
+    const { result } = renderHook(() => useJoinRoom("abcde"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() => result.current.markAdivinaGuess());
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "adivina_guess",
+      payload: { code: "ABCDE" },
+    });
+  });
+
+  it("markAdivinaPass emite adivina_pass con el código en mayúsculas", () => {
+    const { result } = renderHook(() => useJoinRoom("abcde"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() => result.current.markAdivinaPass());
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "adivina_pass",
+      payload: { code: "ABCDE" },
+    });
+  });
+
+  it("adivina_turn_waiting llega igual sin importar de quién sea el turno (waiting_ready)", async () => {
+    const { result } = renderHook(() => useJoinRoom("ABCDE"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() =>
+      lastSocket?.triggerRoomState(
+        makeRoom({ players: [{ id: "p1", name: "Ana", socketId: "socket-1" }] }),
+      ),
+    );
+    await waitFor(() => expect(result.current.playerId).toBe("p1"));
+
+    act(() =>
+      lastSocket?.trigger("adivina_turn_waiting", {
+        code: "ABCDE",
+        playerId: "p1",
+        playerName: "Ana",
+        teamId: "t1",
+        marcador: [{ teamId: "t1", score: 0 }],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.adivinaPalabra).toEqual({
+        phase: "waiting_ready",
+        playerId: "p1",
+        playerName: "Ana",
+        teamId: "t1",
+        marcador: [{ teamId: "t1", score: 0 }],
+      });
+    });
+  });
+
+  it("adivina_jugador_estado pasa a active_player, nunca con la palabra", async () => {
+    const { result } = renderHook(() => useJoinRoom("ABCDE"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() =>
+      lastSocket?.trigger("adivina_jugador_estado", {
+        code: "ABCDE",
+        remainingSeconds: 30,
+        pasesRestantes: 3,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.adivinaPalabra).toEqual({
+        phase: "active_player",
+        remainingSeconds: 30,
+        pasesRestantes: 3,
+      });
+    });
+    expect(result.current.adivinaPalabra).not.toHaveProperty("palabra");
+  });
+
+  it("un room_state con currentGame: null resetea `adivinaPalabra` a idle", async () => {
+    const { result } = renderHook(() => useJoinRoom("ABCDE"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() =>
+      lastSocket?.trigger("adivina_jugador_estado", {
+        code: "ABCDE",
+        remainingSeconds: 30,
+        pasesRestantes: 3,
+      }),
+    );
+    await waitFor(() => expect(result.current.adivinaPalabra.phase).toBe("active_player"));
+
+    act(() => lastSocket?.triggerRoomState(makeRoom({ currentGame: null })));
+
+    await waitFor(() => {
+      expect(result.current.adivinaPalabra).toEqual({ phase: "idle" });
+    });
+  });
 });
