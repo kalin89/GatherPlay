@@ -24,6 +24,7 @@ function makeActions(overrides: Partial<RoomActions> = {}): RoomActions {
     randomizeTeams: vi.fn(),
     selectGame: vi.fn(),
     startTriviaGame: vi.fn(),
+    startGestosGame: vi.fn(),
     ...overrides,
   };
 }

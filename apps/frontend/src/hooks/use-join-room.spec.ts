@@ -251,4 +251,114 @@ describe("useJoinRoom", () => {
       expect(result.current.trivia.phase).toBe("waiting_turn");
     });
   });
+
+  it("startGestosTurn emite start_gestos_turn con el código en mayúsculas", () => {
+    const { result } = renderHook(() => useJoinRoom("abcde"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() => result.current.startGestosTurn());
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "start_gestos_turn",
+      payload: { code: "ABCDE" },
+    });
+  });
+
+  it("markGestureWord emite mark_gesture_word con el código y el resultado", () => {
+    const { result } = renderHook(() => useJoinRoom("abcde"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() => result.current.markGestureWord("paso"));
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "mark_gesture_word",
+      payload: { code: "ABCDE", resultado: "paso" },
+    });
+  });
+
+  it("gestos_turn_waiting con mi propio playerId pasa a ready_to_start", async () => {
+    const { result } = renderHook(() => useJoinRoom("ABCDE"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() =>
+      lastSocket?.triggerRoomState(
+        makeRoom({ players: [{ id: "p1", name: "Ana", socketId: "socket-1" }] }),
+      ),
+    );
+    await waitFor(() => expect(result.current.playerId).toBe("p1"));
+
+    act(() =>
+      lastSocket?.trigger("gestos_turn_waiting", {
+        code: "ABCDE",
+        playerId: "p1",
+        playerName: "Ana",
+        teamId: "t1",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.gestos).toEqual({ phase: "ready_to_start" });
+    });
+  });
+
+  it("gestos_turn_waiting con el playerId de otro jugador pasa a waiting_turn", async () => {
+    const { result } = renderHook(() => useJoinRoom("ABCDE"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() =>
+      lastSocket?.triggerRoomState(
+        makeRoom({ players: [{ id: "p1", name: "Ana", socketId: "socket-1" }] }),
+      ),
+    );
+    await waitFor(() => expect(result.current.playerId).toBe("p1"));
+
+    act(() =>
+      lastSocket?.trigger("gestos_turn_waiting", {
+        code: "ABCDE",
+        playerId: "p2",
+        playerName: "Beto",
+        teamId: "t2",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.gestos).toEqual({
+        phase: "waiting_turn",
+        playerId: "p2",
+        playerName: "Beto",
+        teamId: "t2",
+      });
+    });
+  });
+
+  it("gestos_actor_ready pasa a my_turn_active, sin ninguna palabra", async () => {
+    const { result } = renderHook(() => useJoinRoom("ABCDE"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() => lastSocket?.trigger("gestos_actor_ready", { code: "ABCDE" }));
+
+    await waitFor(() => {
+      expect(result.current.gestos).toEqual({ phase: "my_turn_active" });
+    });
+  });
+
+  it("un room_state con currentGame: null resetea `gestos` a idle", async () => {
+    const { result } = renderHook(() => useJoinRoom("ABCDE"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() => lastSocket?.trigger("gestos_actor_ready", { code: "ABCDE" }));
+    await waitFor(() => expect(result.current.gestos.phase).toBe("my_turn_active"));
+
+    act(() => lastSocket?.triggerRoomState(makeRoom({ currentGame: null })));
+
+    await waitFor(() => {
+      expect(result.current.gestos).toEqual({ phase: "idle" });
+    });
+  });
 });

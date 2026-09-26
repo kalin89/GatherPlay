@@ -150,6 +150,30 @@ describe("PlayLobby", () => {
     });
   });
 
+  it("con Caras y Gestos elegido, muestra su control en vez del equipo", async () => {
+    render(<PlayLobby roomCode="ABCDE" />);
+
+    fireEvent.change(screen.getByPlaceholderText("Tu nombre"), {
+      target: { value: "Ana" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /unirme/i }));
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(
+      makeRoom({
+        currentGame: "caras-y-gestos",
+        players: [{ id: "p1", name: "Ana", socketId: "socket-1" }],
+        teams: [
+          { id: "t1", name: "Rojos", color: "#ff0000", playerIds: ["p1"], score: 0 },
+        ],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/esperando a que arranque la partida/i)).toBeInTheDocument();
+      expect(screen.queryByText("Rojos")).not.toBeInTheDocument();
+    });
+  });
+
   it("muestra el mensaje de sala no encontrada al recibir error", async () => {
     render(<PlayLobby roomCode="ZZZZZ" />);
 

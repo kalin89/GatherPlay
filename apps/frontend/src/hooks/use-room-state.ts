@@ -10,6 +10,13 @@ import {
   triviaReducer,
   type TriviaMatchView,
 } from "@/lib/trivia-match";
+import {
+  gestosReducer,
+  initialGestosMatchView,
+  subscribeToGestos,
+  type GestosAction,
+  type GestosMatchView,
+} from "@/lib/gestos-match";
 
 interface RoomError {
   message: string;
@@ -22,6 +29,7 @@ export interface RoomActions {
   randomizeTeams: () => void;
   selectGame: (gameId: GameId) => void;
   startTriviaGame: () => void;
+  startGestosGame: () => void;
 }
 
 export interface UseRoomStateResult {
@@ -38,6 +46,10 @@ export interface UseRoomStateResult {
    * conexión solo para mandar acciones. */
   actions: RoomActions;
   trivia: TriviaMatchView;
+  /** Versión "pantalla" — nunca compara contra un playerId propio (la
+   * pantalla no es un jugador), así que `gestos_turn_waiting` siempre cae en
+   * `waiting_turn`, nunca en `ready_to_start`. */
+  gestos: GestosMatchView;
 }
 
 // Se suscribe a una sala como espectador (vía `watch_room`, sin registrarse
@@ -55,6 +67,10 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
   const [actionError, setActionError] = useState<RoomError | null>(null);
   const [connecting, setConnecting] = useState(true);
   const [trivia, dispatchTrivia] = useReducer(triviaReducer, initialTriviaMatchView);
+  const [gestos, dispatchGestos] = useReducer(
+    (state: GestosMatchView, action: GestosAction) => gestosReducer(state, action, null),
+    initialGestosMatchView,
+  );
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
@@ -62,6 +78,7 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
     const socket = createSocket();
     socketRef.current = socket;
     const unsubscribeTrivia = subscribeToTrivia(socket, dispatchTrivia);
+    const unsubscribeGestos = subscribeToGestos(socket, dispatchGestos);
 
     socket.on("connect", () => {
       socket.emit("watch_room", { code: roomCode });
@@ -72,11 +89,12 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
       setConnecting(false);
       setError(null);
       setState(room);
-      // Sin juego elegido, la vista de trivia no debe arrastrar el resultado
-      // de una partida anterior — si no, elegir Trivia de nuevo se queda
-      // mostrando el resultado viejo en vez de arrancar.
+      // Sin juego elegido, la vista de cada minijuego no debe arrastrar el
+      // resultado de una partida anterior — si no, elegir el mismo juego de
+      // nuevo se queda mostrando el resultado viejo en vez de arrancar.
       if (room.currentGame === null) {
         dispatchTrivia({ type: "reset" });
+        dispatchGestos({ type: "reset" });
       }
     });
 
@@ -91,6 +109,7 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
 
     return () => {
       unsubscribeTrivia();
+      unsubscribeGestos();
       socket.disconnect();
       socketRef.current = null;
     };
@@ -132,12 +151,17 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
     socketRef.current?.emit("start_trivia_game", { code: roomCode });
   }, [roomCode]);
 
+  const startGestosGame = useCallback(() => {
+    socketRef.current?.emit("start_gestos_game", { code: roomCode });
+  }, [roomCode]);
+
   return {
     state,
     error,
     actionError,
     connecting,
     trivia,
+    gestos,
     actions: {
       createTeam,
       removeTeam,
@@ -145,6 +169,7 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
       randomizeTeams,
       selectGame,
       startTriviaGame,
+      startGestosGame,
     },
   };
 }
