@@ -61,7 +61,25 @@ Se implementa Trivia primero porque es el más simple de validar (no depende de 
 - [ ] Rosco de palabras
 - [ ] Impostor
 - [ ] ¿Quién es quién?
-- [ ] La Rocola (buzzer de dos jugadores compitiendo)
+- [ ] La Rocola: contenido (banco de canciones + preview/portada vía iTunes, dedup por
+      sala). Ver `specs/features/rocola-content/analysis.md`.
+- [ ] La Rocola (backend): buzzer libre, pausa/reanuda canción, robo de punto,
+      revelación de título/artista/portada por ronda, 10 canciones por partida.
+      Depende de: `specs/features/rocola-content/analysis.md`. Ver
+      `specs/features/la-rocola-module/analysis.md`.
+- [ ] La Rocola (frontend): botón "¡Me la sé!", conteo con sonido de reloj, audio desde
+      el host, robo de punto, revelación, y primera implementación de las
+      convenciones de pantalla de juego (instrucciones + "Listo" de todos, marcador en
+      la esquina superior derecha, ganador/empate). Depende de:
+      `specs/features/la-rocola-module/analysis.md` y
+      `specs/features/game-selection-ui/analysis.md`. Ver
+      `specs/features/la-rocola-ui/analysis.md`.
+- [ ] Adaptar Trivia, Caras y Gestos y Adivina la palabra a las convenciones de
+      pantalla de juego (instrucciones + "Listo" de todos, marcador en la esquina
+      superior derecha, ganador/empate) usando los componentes genéricos y el
+      `ReadyGate` construidos en `specs/features/la-rocola-module/analysis.md` /
+      `specs/features/la-rocola-ui/analysis.md` — no requiere volver a abrir esas
+      tareas ya cerradas, solo consumir lo que ya existe.
 - [ ] Cadena de palabras contrarreloj
 - [ ] Memoriza los objetos en la imagen (bloqueada: falta que Kalin agregue el requerimiento en `spec.md` → "Minijuegos" → "10. Memoriza los objetos en la imagen")
 

@@ -99,6 +99,35 @@ Regla compartida para cualquier minijuego que reparta turnos individuales entre 
 
 - **Given** una cantidad de rondas configurada para el juego y equipos de distinto tamaño, **when** arranca la partida, **then** el total de turnos de cada equipo es "rondas × tamaño del equipo más grande", y ese total se reparte lo más parejo posible entre los integrantes de ese equipo (ningún jugador del equipo tiene dos turnos más que otro compañero de su mismo equipo).
 
+### Convenciones de toda pantalla de juego
+
+Reglas compartidas por cualquier minijuego, nuevas o existentes — se documentan una
+sola vez acá. Un minijuego nuevo las implementa desde el día uno; adaptar los
+minijuegos ya cerrados (Trivia, Caras y Gestos, Adivina la palabra) a estas
+convenciones es una tarea aparte en `tasks.md`, no se reabren esas tareas para esto.
+
+- **Given** un minijuego recién elegido desde el panel de selección, **when** arranca,
+  **then** la pantalla y el celular de cada jugador muestran las instrucciones del
+  juego de forma clara pero breve, junto con un botón "Listo" en cada celular.
+- **Given** las instrucciones visibles con jugadores que todavía no presionaron
+  "Listo", **when** falta al menos uno, **then** el juego no arranca y se puede ver
+  cuántos faltan.
+- **Given** todos los jugadores conectados con equipo asignado presionan "Listo",
+  **when** eso ocurre, **then** las instrucciones se ocultan en todos los dispositivos
+  y arranca el juego (el conteo o el primer turno, según cada minijuego).
+- **Given** un jugador se desconecta mientras se espera que todos presionen "Listo",
+  **when** eso ocurre, **then** deja de contarse entre los pendientes.
+- **Given** cualquier pantalla de un minijuego en curso, **when** se muestra, **then**
+  el marcador de esa partida (puntaje parcial de cada equipo, en 0 al arrancar) aparece
+  en la esquina superior derecha durante todo el juego.
+- **Given** una partida de cualquier minijuego que termina, **when** se muestran los
+  resultados, **then** se indica el equipo ganador ("El ganador de este juego es el
+  equipo {nombre}") o, si hay empate en el puntaje más alto, la palabra "Empate".
+- **Given** los puntos obtenidos en una partida de cualquier minijuego, **when** la
+  partida termina, **then** esos puntos ya quedaron sumados al puntaje acumulado de
+  cada equipo (mismo mecanismo que "Fases, temporizador y puntaje" en "Motor de sala")
+  y ese acumulado se ve reflejado en el panel de selección de juego.
+
 ## Contenido de IA — Trivia
 
 `AiContentModule.getTriviaQuestions(categoria)` genera las preguntas de Trivia (ver
@@ -168,6 +197,37 @@ sala.
   puedan conseguir sin repetir, aunque sean menos que la cantidad pedida (caso límite
   aceptado: una sesión familiar real no agota un banco de ~150 palabras).
 
+## Contenido — La Rocola (canciones)
+
+`RocolaContentService.selectSongs(cantidad, excluir)` elige las canciones de "La
+Rocola" (ver "Minijuegos" → "8. La Rocola") antes de arrancar la partida completa (las
+10 canciones de una vez, no ronda a ronda), nunca durante un temporizador
+(constitution.md, principio 5). A diferencia de Trivia/Caras y Gestos/Adivina la
+palabra, acá no hay generación por IA: el contenido es un banco curado a mano de
+canciones en español (cumbia, merengue, salsa, balada, ranchera, pop, rock, popular —
+clásicas y actuales, ver punto 16 de "La Rocola") más una API pública gratuita para
+obtener el preview de audio y la portada de cada canción.
+
+- **Given** una cantidad válida y una lista de canciones a excluir (ya sonadas antes en
+  la misma sala), **when** se piden canciones, **then** se devuelven `cantidad`
+  canciones distintas entre sí, ninguna coincide con la exclusión, cada una con su
+  preview de audio y portada listos para reproducirse, y como máximo 2 canciones del
+  mismo género entre las devueltas (mientras el banco lo permita).
+- **Given** el servicio de previews (API externa) falla, tarda más que el timeout o no
+  devuelve preview para alguna canción elegida, **when** se piden canciones, **then**
+  esa canción se descarta y se completa con otra del banco que si tenga preview
+  disponible, sin error hacia quien llama.
+- **Given** el servicio de previews falla por completo (ej. sin red), **when** se piden
+  canciones, **then** se completan con un sub-banco de respaldo más chico cuyo preview y
+  portada ya quedaron guardados de antemano (no depende de la API en ese momento).
+- **Given** una cantidad inválida (menor a 1 o no entera), **when** se piden canciones,
+  **then** se recibe un error y no se llama a ningún servicio externo.
+- **Given** el banco no tiene suficientes canciones nuevas para cubrir la exclusión
+  pedida, **when** se piden canciones, **then** se reinicia la exclusión de esa sala
+  para este juego (se permite repetir canciones de partidas muy anteriores) en vez de
+  bloquear la partida — caso límite aceptado, una sesión familiar real no agota un
+  banco de ~150-200 canciones en una sola reunión.
+
 ## Minijuegos
 
 ### 1. Mímica / Caras y Gestos
@@ -224,10 +284,65 @@ Un jugador recibe un personaje/celebridad asignado (solo visible para los demás
 - **Given** el jugador que pregunta, **when** dice el nombre correcto del personaje antes de agotar sus intentos/tiempo, **then** gana los puntos de la ronda.
 
 ### 8. La Rocola
-Se forman equipos; en cada ronda un integrante de cada equipo escucha la canción que suena y compite contra su rival por adivinarla primero.
 
-- **Given** dos jugadores (uno por equipo) con la misma canción sonando, **when** uno de los dos presiona su botón de "ya sé" antes que el otro, **then** se le da la primera oportunidad de responder; si acierta, su equipo gana los puntos y termina la ronda.
-- **Given** el primer jugador en presionar responde incorrecto, **when** eso ocurre, **then** se le da la oportunidad al segundo jugador antes de pasar a la siguiente canción.
+Dos equipos o más (de 1 o más integrantes cada uno) compiten por adivinar la canción
+que suena, con buzzer libre: cualquier jugador de cualquier equipo puede presionar
+"¡Me la sé!" en cuanto arranca la canción. El juego no es el juez — el jugador que
+gana el buzzer dice la respuesta en voz alta y el resto del grupo decide si es
+correcta; ese mismo jugador confirma el resultado desde su celular. Se juegan 10
+canciones por partida, en español y variadas (cumbia, merengue, salsa, baladas,
+rancheras, pop, rock, popular — desde clásicos hasta actuales, para que participe
+toda la familia).
+
+- **Given** la partida recién elegida desde el panel de selección de juego (tras la
+  convención de instrucciones + "Listo" de todos), **when** arranca la primera ronda,
+  **then** la pantalla muestra un conteo descendente de 5 segundos, con un sonido de
+  reloj en cada segundo que pasa (reutilizando uno existente si ya hay un sonido de
+  cuenta regresiva).
+- **Given** el conteo llega a cero, **when** eso ocurre, **then** la pantalla muestra
+  un texto grande con un ícono o emoji de música y el texto "Adivina la canción", y en
+  ese mismo instante empieza a sonar la canción de la ronda (reproducida desde el
+  dispositivo del host, nunca desde los celulares) y se habilita el botón de los
+  jugadores.
+- **Given** la canción sonando, **when** cualquier jugador de cualquier equipo mira su
+  celular, **then** ve un único botón redondo verde con el texto "¡Me la sé!",
+  deshabilitado hasta el instante en que arranca la canción.
+- **Given** el botón habilitado y la canción sonando, **when** un jugador lo presiona,
+  **then** el botón de todos los demás jugadores queda deshabilitado de inmediato, la
+  canción se pausa, y a ese jugador le aparecen dos botones nuevos: uno verde con un
+  ícono de check y otro rojo con un ícono de "x".
+- **Given** el jugador que presionó primero, **when** dice en voz alta su respuesta y
+  el resto del grupo decide si es válida, **then** ese mismo jugador presiona el botón
+  verde (correcto) o el rojo (incorrecto) reflejando lo que el grupo decidió — la
+  lógica del juego nunca valida el contenido de la respuesta.
+- **Given** el jugador presiona el botón verde (correcto), **when** eso ocurre,
+  **then** se otorga 1 punto a su equipo y la ronda termina.
+- **Given** el jugador presiona el botón rojo (incorrecto), **when** eso ocurre,
+  **then** sus botones verde/rojo desaparecen de su celular y la pantalla muestra
+  "Robo de punto del equipo {nombre del equipo contrario}" (o, con más de dos equipos,
+  los nombres de todos los equipos distintos al que falló) mientras la canción se
+  reanuda desde donde se pausó.
+- **Given** la fase de robo de punto, **when** dura hasta 5 segundos, **then** el botón
+  "¡Me la sé!" vuelve a habilitarse, mostrado solo a los jugadores de los equipos con
+  chance de robar.
+- **Given** alguien presiona el botón durante el robo antes de que termine el tiempo,
+  **when** eso ocurre, **then** se repite la misma dinámica de buzzer único → canción
+  se pausa → botones verde/rojo solo para ese jugador → él confirma con el grupo.
+- **Given** el robo también termina en incorrecto (botón rojo), **when** eso ocurre,
+  **then** la ronda termina sin puntos para nadie y se pasa a la revelación.
+- **Given** nadie presiona el botón durante toda la canción, o nadie presiona durante
+  los 5 segundos de robo, **when** eso ocurre, **then** la ronda termina sin puntos
+  para nadie y se pasa a la revelación (mismo resultado que un robo fallido).
+- **Given** una ronda recién resuelta (con o sin punto otorgado), **when** termina,
+  **then** la pantalla revela el título, el artista y la portada de la canción durante
+  unos segundos antes de pasar a la siguiente ronda.
+- **Given** las 10 canciones de la partida ya jugadas, **when** eso ocurre, **then** la
+  partida pasa a resultados con el puntaje **obtenido en esa partida** por cada equipo,
+  siguiendo la convención general de pantalla de juego (marcador, ganador o empate).
+- **Given** una sala donde ya se jugó al menos una partida de "La Rocola", **when** se
+  vuelve a elegir este juego en la misma sala, **then** no se repiten canciones ya
+  sonadas en partidas anteriores de esa sala, salvo que se agote el banco disponible
+  (caso límite aceptado, ver "Contenido — La Rocola").
 
 ### 9. Cadena de palabras contrarreloj
 Se da una categoría; cada equipo dice una palabra relacionada y presiona un botón, lo que arranca la cuenta regresiva del equipo contrario.
