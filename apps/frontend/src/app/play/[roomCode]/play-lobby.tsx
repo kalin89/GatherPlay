@@ -4,26 +4,47 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { useJoinRoom } from "@/hooks/use-join-room";
 import { splitPlayersByTeam } from "@/lib/room-selectors";
 import { getGameLabel } from "@/lib/game-catalog";
-import type { GameId } from "@/lib/room-types";
+import type { GameId, RoomState } from "@/lib/room-types";
+import type { TriviaMatchView } from "@/lib/trivia-match";
 import { TeamBoard } from "@/components/team-board";
+import { PlayTrivia } from "./play-trivia";
 import styles from "./play-lobby.module.css";
 
 const MAX_NAME_LENGTH = 20;
 
 // Mismo criterio que `renderGameScreen` en screen-lobby.tsx: único lugar que
-// sabe qué juegos tienen de verdad un control propio implementado. Se agrega
-// un caso acá cuando exista `PlayTrivia` (specs/features/trivia-ui/analysis.md).
-function renderGameControl(gameId: GameId): ReactNode {
+// sabe qué juegos tienen de verdad un control propio implementado.
+function renderGameControl(
+  gameId: GameId,
+  state: RoomState,
+  playerId: string | null,
+  trivia: TriviaMatchView,
+  submitAnswer: (opcionIndex: number) => void,
+  actionError: { message: string } | null,
+): ReactNode {
   switch (gameId) {
+    case "trivia":
+      return (
+        <PlayTrivia
+          state={state}
+          playerId={playerId}
+          trivia={trivia}
+          submitAnswer={submitAnswer}
+          actionError={actionError}
+        />
+      );
     default:
       return (
-        <p className={styles.message}>Preparando {getGameLabel(gameId)}…</p>
+        <main className={styles.page}>
+          <p className={styles.message}>Preparando {getGameLabel(gameId)}…</p>
+        </main>
       );
   }
 }
 
 export function PlayLobby({ roomCode }: { roomCode: string }) {
-  const { status, state, error, playerId, join } = useJoinRoom(roomCode);
+  const { status, state, error, actionError, playerId, trivia, join, submitAnswer } =
+    useJoinRoom(roomCode);
   const [name, setName] = useState("");
 
   const trimmedName = name.trim();
@@ -44,6 +65,17 @@ export function PlayLobby({ roomCode }: { roomCode: string }) {
   }
 
   if (status === "joined" && state) {
+    if (state.currentGame !== null) {
+      return renderGameControl(
+        state.currentGame,
+        state,
+        playerId,
+        trivia,
+        submitAnswer,
+        actionError,
+      );
+    }
+
     const { teams } = splitPlayersByTeam(state);
     const myTeam = teams.find((t) => t.players.some((p) => p.id === playerId));
 
@@ -53,16 +85,12 @@ export function PlayLobby({ roomCode }: { roomCode: string }) {
           ¡Listo, <strong>{trimmedName}</strong>!
         </p>
         {myTeam ? (
-          state.currentGame !== null ? (
-            renderGameControl(state.currentGame)
-          ) : (
-            <>
-              <TeamBoard team={myTeam.team} players={myTeam.players} />
-              <p className={styles.message}>
-                Esperando a que el anfitrión elija el juego…
-              </p>
-            </>
-          )
+          <>
+            <TeamBoard team={myTeam.team} players={myTeam.players} />
+            <p className={styles.message}>
+              Esperando a que el anfitrión elija el juego…
+            </p>
+          </>
         ) : (
           <p className={styles.message}>
             Esperando a que el anfitrión arme los equipos…

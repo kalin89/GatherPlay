@@ -1,0 +1,10 @@
+.countdown {
+  font-size: clamp(40px, 8vw, 96px);
+  font-weight: 800;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.urgent {
+  color: #ef4444;
+}

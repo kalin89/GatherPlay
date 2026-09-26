@@ -15,6 +15,10 @@ class FakeSocket {
     this.handlers.set(event, handler);
   }
 
+  off(event: string) {
+    this.handlers.delete(event);
+  }
+
   emit(event: string, payload?: unknown) {
     this.emitted.push({ event, payload });
   }
@@ -33,6 +37,10 @@ class FakeSocket {
 
   triggerError(payload: { message: string }) {
     this.handlers.get("error")?.(payload);
+  }
+
+  trigger(event: string, payload?: unknown) {
+    this.handlers.get(event)?.(payload);
   }
 }
 
@@ -231,7 +239,7 @@ describe("ScreenLobby", () => {
     lastSocket?.triggerRoomState(
       makeRoom({
         players: [{ id: "p1", name: "Ana", socketId: "s1" }],
-        teams: [{ id: "t1", name: "Rojos", color: "#ef4444", playerIds: ["p1"], score: 0 }],
+        teams: [{ id: "t1", name: "Rojos", color: "#ef4444", playerIds: ["p1"], score: 300 }],
       }),
     );
 
@@ -242,6 +250,8 @@ describe("ScreenLobby", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Elegí un juego")).toBeInTheDocument();
+      expect(screen.getByText("Rojos")).toBeInTheDocument();
+      expect(screen.getByText("300")).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole("button", { name: /trivia/i }));
 
@@ -257,8 +267,62 @@ describe("ScreenLobby", () => {
     lastSocket?.triggerRoomState(makeRoom({ currentGame: "trivia" }));
 
     await waitFor(() => {
-      expect(screen.getByText(/preparando trivia/i)).toBeInTheDocument();
+      expect(screen.getByText(/arrancando trivia/i)).toBeInTheDocument();
       expect(screen.queryByPlaceholderText("Nombre del equipo")).not.toBeInTheDocument();
+    });
+  });
+
+  it("de punta a punta: terminada una partida y vuelto al panel, elegir Trivia de nuevo arranca (no muestra el resultado viejo)", async () => {
+    render(<ScreenLobby roomCode="ABCDE" />);
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(
+      makeRoom({
+        teams: [{ id: "t1", name: "Rojos", color: "#ef4444", playerIds: ["p1"], score: 0 }],
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /iniciar partida/i })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /iniciar partida/i }));
+    await waitFor(() => expect(screen.getByText("Elegí un juego")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /trivia/i }));
+
+    lastSocket?.triggerRoomState(
+      makeRoom({
+        currentGame: "trivia",
+        teams: [{ id: "t1", name: "Rojos", color: "#ef4444", playerIds: ["p1"], score: 0 }],
+      }),
+    );
+    await waitFor(() => expect(screen.getByText(/arrancando trivia/i)).toBeInTheDocument());
+
+    // Primera partida: llega a resultado.
+    lastSocket?.trigger("trivia_match_result", {
+      code: "ABCDE",
+      scores: [{ teamId: "t1", score: 100 }],
+    });
+    await waitFor(() => expect(screen.getByText("Resultado final")).toBeInTheDocument());
+
+    // El backend, 10s después, resetea currentGame a null (simulado acá con el
+    // room_state que ese timeout dispara).
+    lastSocket?.triggerRoomState(
+      makeRoom({
+        teams: [{ id: "t1", name: "Rojos", color: "#ef4444", playerIds: ["p1"], score: 100 }],
+      }),
+    );
+    await waitFor(() => expect(screen.getByText("Elegí un juego")).toBeInTheDocument());
+
+    // El host elige Trivia de nuevo.
+    fireEvent.click(screen.getByRole("button", { name: /trivia/i }));
+    lastSocket?.triggerRoomState(
+      makeRoom({
+        currentGame: "trivia",
+        teams: [{ id: "t1", name: "Rojos", color: "#ef4444", playerIds: ["p1"], score: 100 }],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/arrancando trivia/i)).toBeInTheDocument();
+      expect(screen.queryByText("Resultado final")).not.toBeInTheDocument();
     });
   });
 });

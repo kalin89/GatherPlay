@@ -1,32 +1,42 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { useRoomState } from "@/hooks/use-room-state";
+import { useRoomState, type RoomActions } from "@/hooks/use-room-state";
 import { buildJoinUrl } from "@/lib/join-url";
 import { getGameLabel } from "@/lib/game-catalog";
-import type { GameId } from "@/lib/room-types";
+import type { GameId, RoomState } from "@/lib/room-types";
+import type { TriviaMatchView } from "@/lib/trivia-match";
 import { RoomCode } from "@/components/room-code";
 import { JoinQr } from "@/components/join-qr";
 import { TeamManager } from "./team-manager";
 import { StartMatchButton } from "./start-match-button";
 import { GameSelectionPanel } from "./game-selection-panel";
+import { ScreenTrivia } from "./screen-trivia";
 import styles from "./screen-lobby.module.css";
 
 // Único lugar que conoce qué juegos tienen de verdad una pantalla propia
 // implementada (a diferencia de GAME_CATALOG, que puede listar juegos
-// "próximamente" sin componente todavía). Se agrega un caso acá cuando
-// exista `ScreenTrivia` (specs/features/trivia-ui/analysis.md).
-function renderGameScreen(gameId: GameId): ReactNode {
+// "próximamente" sin componente todavía).
+function renderGameScreen(
+  gameId: GameId,
+  state: RoomState,
+  actions: RoomActions,
+  trivia: TriviaMatchView,
+): ReactNode {
   switch (gameId) {
+    case "trivia":
+      return <ScreenTrivia state={state} actions={actions} trivia={trivia} />;
     default:
       return (
-        <p className={styles.message}>Preparando {getGameLabel(gameId)}…</p>
+        <main className={styles.page}>
+          <p className={styles.message}>Preparando {getGameLabel(gameId)}…</p>
+        </main>
       );
   }
 }
 
 export function ScreenLobby({ roomCode }: { roomCode: string }) {
-  const { state, error, actionError, connecting, actions } = useRoomState(roomCode);
+  const { state, error, actionError, connecting, actions, trivia } = useRoomState(roomCode);
   const [hasCheckedInitialReveal, setHasCheckedInitialReveal] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [showGamePanel, setShowGamePanel] = useState(false);
@@ -63,7 +73,7 @@ export function ScreenLobby({ roomCode }: { roomCode: string }) {
   }
 
   if (state.currentGame !== null) {
-    return <main className={styles.page}>{renderGameScreen(state.currentGame)}</main>;
+    return renderGameScreen(state.currentGame, state, actions, trivia);
   }
 
   const noTeamHasPlayers = state.teams.every((t) => t.playerIds.length === 0);
@@ -73,7 +83,7 @@ export function ScreenLobby({ roomCode }: { roomCode: string }) {
       {actionError && <p className={styles.actionError}>{actionError.message}</p>}
 
       {showGamePanel ? (
-        <GameSelectionPanel onSelect={actions.selectGame} />
+        <GameSelectionPanel onSelect={actions.selectGame} teams={state.teams} />
       ) : (
         <>
           {revealed ? (

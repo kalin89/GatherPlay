@@ -23,6 +23,7 @@ function makeActions(overrides: Partial<RoomActions> = {}): RoomActions {
     assignPlayerToTeam: vi.fn(),
     randomizeTeams: vi.fn(),
     selectGame: vi.fn(),
+    startTriviaGame: vi.fn(),
     ...overrides,
   };
 }

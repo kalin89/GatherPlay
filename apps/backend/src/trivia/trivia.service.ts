@@ -60,16 +60,24 @@ interface TriviaQuestionState {
 interface TriviaMatchState {
   turns: TurnAssignment[];
   currentIndex: number;
-  currentQuestion: TriviaQuestionState | null;
+  questions: TriviaQuestionState[];
   answered: boolean;
   timer: RoundTimer | null;
+  // Puntos ganados en ESTA partida (para el resultado final) — distinto de
+  // team.score, que es el acumulado de por vida y se ve en el panel de
+  // selección de juego.
+  matchScores: Map<string, number>;
 }
 
 const DEFAULT_CATEGORY = 'general';
 const ROUNDS_PER_PLAYER = 3;
-const TRIVIA_TURN_POINTS = 100;
+const TRIVIA_TURN_POINTS = 1;
 const TRIVIA_TURN_SECONDS = 15;
 const TURN_TRANSITION_DELAY_MS = 2500;
+const RESULTS_DISPLAY_MS = 10_000;
+// Por debajo del MAX_QUESTIONS de AiContentService, sin acoplar ambos módulos —
+// red de seguridad para no pedirle a la IA más de lo que puede dar en un lote.
+const MAX_TRIVIA_QUESTIONS_PER_MATCH = 40;
 
 // Rediseño a turnos individuales — ver specs/features/trivia-module/analysis.md
 // para por qué esto usa RoundTimer directamente en vez de
@@ -113,13 +121,17 @@ export class TriviaService implements OnModuleDestroy {
     this.matches.set(code, {
       turns,
       currentIndex: 0,
-      currentQuestion: null,
+      questions: [],
       answered: false,
       timer: null,
+      matchScores: new Map(room.teams.map((team) => [team.id, 0])),
     });
 
     this.emit({ type: 'room_state', code, room });
-    void this.startTurn(code);
+    void this.loadQuestionsAndStartFirstTurn(
+      code,
+      Math.min(turns.length, MAX_TRIVIA_QUESTIONS_PER_MATCH),
+    );
   }
 
   submitAnswer(code: string, socketId: string, opcionIndex: number): void {
@@ -142,7 +154,7 @@ export class TriviaService implements OnModuleDestroy {
       throw new AlreadyAnsweredError(player.id);
     }
 
-    const question = match.currentQuestion!;
+    const question = this.currentQuestion(match);
     if (
       !Number.isInteger(opcionIndex) ||
       opcionIndex < 0 ||
@@ -156,18 +168,30 @@ export class TriviaService implements OnModuleDestroy {
     this.resolveTurn(code, opcionIndex);
   }
 
-  private async startTurn(code: string): Promise<void> {
+  private async loadQuestionsAndStartFirstTurn(code: string, count: number): Promise<void> {
+    const match = this.matches.get(code);
+    if (!match) return;
+
+    const preguntas = await this.aiContent.getTriviaQuestions(DEFAULT_CATEGORY, count);
+    match.questions = preguntas.map((p) => ({
+      pregunta: p.pregunta,
+      opciones: p.opciones,
+      indiceCorrecto: p.indiceCorrecto,
+    }));
+
+    this.startTurn(code);
+  }
+
+  private currentQuestion(match: TriviaMatchState): TriviaQuestionState {
+    return match.questions[match.currentIndex % match.questions.length]!;
+  }
+
+  private startTurn(code: string): void {
     const match = this.matches.get(code)!;
     const room = this.rooms.getRoomOrThrow(code);
     const turn = match.turns[match.currentIndex]!;
     const player = room.players.find((p) => p.id === turn.playerId)!;
-
-    const [pregunta] = await this.aiContent.getTriviaQuestions(DEFAULT_CATEGORY, 1);
-    match.currentQuestion = {
-      pregunta: pregunta.pregunta,
-      opciones: pregunta.opciones,
-      indiceCorrecto: pregunta.indiceCorrecto,
-    };
+    const question = this.currentQuestion(match);
     match.answered = false;
 
     const targetSocketIds = [screenRoomName(code), player.socketId];
@@ -185,8 +209,8 @@ export class TriviaService implements OnModuleDestroy {
       targetSocketIds,
       playerId: player.id,
       playerName: player.name,
-      pregunta: match.currentQuestion.pregunta,
-      opciones: match.currentQuestion.opciones,
+      pregunta: question.pregunta,
+      opciones: question.opciones,
       durationSeconds: TRIVIA_TURN_SECONDS,
     });
 
@@ -206,13 +230,14 @@ export class TriviaService implements OnModuleDestroy {
     const room = this.rooms.getRoomOrThrow(code);
     const turn = match.turns[match.currentIndex]!;
     const player = room.players.find((p) => p.id === turn.playerId)!;
-    const question = match.currentQuestion!;
+    const question = this.currentQuestion(match);
 
     const correcta = opcionIndex !== null && opcionIndex === question.indiceCorrecto;
     const puntos = correcta ? TRIVIA_TURN_POINTS : 0;
 
     if (puntos > 0) {
       this.gameEngine.addScore(code, turn.teamId, puntos);
+      match.matchScores.set(turn.teamId, (match.matchScores.get(turn.teamId) ?? 0) + puntos);
     }
 
     const resultado: TriviaTurnResult = {
@@ -243,25 +268,41 @@ export class TriviaService implements OnModuleDestroy {
 
     if (match.currentIndex + 1 < match.turns.length) {
       match.currentIndex++;
-      void this.startTurn(code);
+      this.startTurn(code);
     } else {
       this.finishMatch(code);
     }
   }
 
   private finishMatch(code: string): void {
+    const match = this.matches.get(code)!;
     const room = this.rooms.getRoomOrThrow(code);
     room.status = 'resultados';
     room.round = null;
 
+    // Puntos de ESTA partida, no el acumulado de team.score — ese se ve en
+    // el panel de selección de juego.
     const scores: TeamScore[] = room.teams.map((team) => ({
       teamId: team.id,
-      score: team.score,
+      score: match.matchScores.get(team.id) ?? 0,
     }));
 
     this.matches.delete(code);
     this.emit({ type: 'room_state', code, room });
     this.emit({ type: 'trivia_match_result', code, scores });
+    this.scheduleReturnToSelection(code);
+  }
+
+  // Deja la pantalla de resultados un rato antes de volver a la selección de
+  // juego, para poder elegir otra partida sin recrear la sala. No resetea
+  // team.score (el marcador se acumula entre partidas).
+  private scheduleReturnToSelection(code: string): void {
+    this.scheduler(() => {
+      const room = this.rooms.getRoom(code);
+      if (!room) return;
+      room.currentGame = null;
+      this.emit({ type: 'room_state', code, room });
+    }, RESULTS_DISPLAY_MS);
   }
 
   private emit(event: TriviaEvent): void {

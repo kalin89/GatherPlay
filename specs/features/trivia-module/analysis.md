@@ -49,7 +49,8 @@ de turnos entre jugadores de un equipo".
   selector en el host. Se deja como constante fácil de cambiar; un selector de
   categoría es pulido a futuro, no de esta tarea.
 - **3 rondas por jugador por defecto**: `ROUNDS_PER_PLAYER = 3` (constante).
-- **Sin bono por rapidez**: `TRIVIA_TURN_POINTS = 100` fijo si acierta, `0` si no.
+- **Sin bono por rapidez**: `TRIVIA_TURN_POINTS = 1` fijo si acierta, `0` si no (cada
+  pregunta correcta vale un punto — ajustado a pedido de Kalin, antes eran 100).
 - **Duración del turno**: `TRIVIA_TURN_SECONDS = 15` (constante, ajustable — no hay un
   valor pedido explícitamente).
 - **Pausa entre turnos**: `TURN_TRANSITION_DELAY_MS = 2500` — la controla el backend
@@ -117,16 +118,20 @@ Estado en memoria: `Map<code, TriviaMatchState>` con
   detiene el timer del turno y llama a `resolveTurn(code, opcionIndex)`.
 - **`resolveTurn(code, opcionIndex)`** (privado, `opcionIndex` puede ser `null` si se
   acabó el tiempo): calcula `correcta`/`puntos` (fijo, sin bono), llama
-  `gameEngine.addScore` si corresponde, arma `TriviaTurnResult`, emite
-  `trivia_turn_result` a toda la sala. Después, con `setTimeout` de
-  `TURN_TRANSITION_DELAY_MS` (scheduler inyectable — mismo patrón que `now` en la
-  versión anterior, para poder testear con fake timers):
+  `gameEngine.addScore` si corresponde (acumulado de por vida en `team.score`, el que
+  se ve en el panel de selección de juego) **y** suma esos mismos puntos a
+  `match.matchScores` (`Map<teamId, number>`, puntos de esta partida puntual), arma
+  `TriviaTurnResult`, emite `trivia_turn_result` a toda la sala. Después, con
+  `setTimeout` de `TURN_TRANSITION_DELAY_MS` (scheduler inyectable — mismo patrón que
+  `now` en la versión anterior, para poder testear con fake timers):
   - Si quedan turnos (`currentIndex + 1 < turns.length`): avanza el índice y llama
     `startTurn(code)`.
   - Si no: `finishMatch(code)` — `room.status = 'resultados'`, `room.round = null`,
-    emite `room_state` y `trivia_match_result` con el puntaje final de cada equipo
-    (mismo shape `TeamScore` que ya usa `game-engine.types.ts`), borra el estado de la
-    partida.
+    emite `room_state` y `trivia_match_result` con `scores` armado desde
+    `match.matchScores` (**no** desde `team.score`) — el resultado final de una
+    partida muestra solo lo ganado en esa partida, nunca el acumulado entre partidas
+    (decisión de Kalin tras probar manualmente que ambas pantallas mostraban lo
+    mismo). Borra el estado de la partida.
 
 ### `trivia.gateway.ts`
 

@@ -12,6 +12,10 @@ class FakeSocket {
     this.handlers.set(event, handler);
   }
 
+  off(event: string) {
+    this.handlers.delete(event);
+  }
+
   emit(event: string, payload?: unknown) {
     this.emitted.push({ event, payload });
   }
@@ -30,6 +34,10 @@ class FakeSocket {
 
   triggerError(payload: { message: string }) {
     this.handlers.get("error")?.(payload);
+  }
+
+  trigger(event: string, payload?: unknown) {
+    this.handlers.get(event)?.(payload);
   }
 }
 
@@ -112,6 +120,82 @@ describe("useRoomState", () => {
     expect(lastSocket?.emitted).toContainEqual({
       event: "select_game",
       payload: { code: "ABCDE", gameId: "trivia" },
+    });
+  });
+
+  it("startTriviaGame emite start_trivia_game con el código de sala", () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    act(() => result.current.actions.startTriviaGame());
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "start_trivia_game",
+      payload: { code: "ABCDE" },
+    });
+  });
+
+  it("los eventos de trivia actualizan `trivia` vía el reducer compartido", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    expect(result.current.trivia).toEqual({ phase: "idle" });
+
+    act(() =>
+      lastSocket?.trigger("trivia_turn_started", {
+        code: "ABCDE",
+        playerId: "p1",
+        playerName: "Ana",
+        pregunta: "¿2+2?",
+        opciones: ["3", "4", "5", "6"],
+        durationSeconds: 15,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.trivia).toMatchObject({ phase: "my_turn", pregunta: "¿2+2?" });
+    });
+  });
+
+  it("un room_state con currentGame: null resetea `trivia` a idle", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    act(() =>
+      lastSocket?.trigger("trivia_turn_started", {
+        code: "ABCDE",
+        playerId: "p1",
+        playerName: "Ana",
+        pregunta: "¿2+2?",
+        opciones: ["3", "4", "5", "6"],
+        durationSeconds: 15,
+      }),
+    );
+    await waitFor(() => expect(result.current.trivia.phase).toBe("my_turn"));
+
+    act(() => lastSocket?.triggerRoomState(makeRoom({ currentGame: null })));
+
+    await waitFor(() => {
+      expect(result.current.trivia).toEqual({ phase: "idle" });
+    });
+  });
+
+  it("un room_state con currentGame no nulo no toca `trivia`", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    act(() =>
+      lastSocket?.trigger("trivia_turn_started", {
+        code: "ABCDE",
+        playerId: "p1",
+        playerName: "Ana",
+        pregunta: "¿2+2?",
+        opciones: ["3", "4", "5", "6"],
+        durationSeconds: 15,
+      }),
+    );
+    await waitFor(() => expect(result.current.trivia.phase).toBe("my_turn"));
+
+    act(() => lastSocket?.triggerRoomState(makeRoom({ currentGame: "trivia" })));
+
+    await waitFor(() => {
+      expect(result.current.trivia.phase).toBe("my_turn");
     });
   });
 

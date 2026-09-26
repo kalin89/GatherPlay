@@ -21,26 +21,32 @@ Ver `spec.md` → "Minijuegos" → "4. Trivia / Preguntados".
 - **`trivia-types.ts`**: espejo de `apps/backend/src/trivia/trivia.types.ts`
   (`trivia_turn_waiting`, `trivia_turn_started`, `trivia_turn_update`,
   `trivia_turn_result`, `trivia_match_result`, `TriviaTurnResult`).
-- **`trivia-match.ts`**: reducer puro `triviaReducer(state, event)`. Estado:
+- **`trivia-match.ts`**: reducer puro `triviaReducer(state, action)`. Estado (forma
+  final, implementada):
   ```ts
   type TriviaMatchView =
     | { phase: 'idle' }
     | { phase: 'waiting_turn'; playerId: string; playerName: string; teamId: string }
-    | { phase: 'my_turn'; pregunta: string; opciones: string[]; remainingSeconds: number; opcionElegida: number | null }
+    | { phase: 'my_turn'; playerId: string; playerName: string; pregunta: string; opciones: string[]; durationSeconds: number; remainingSeconds: number }
     | { phase: 'turn_result'; pregunta: string; opciones: string[]; indiceCorrecto: number; resultado: TriviaTurnResult }
     | { phase: 'match_result'; scores: TeamScore[] };
   ```
+  **Ajuste respecto al sketch original**: `my_turn` no lleva `opcionElegida` — ese
+  estado ("opción tocada, esperando confirmación") queda como `useState` local en
+  `play-trivia.tsx`, no en el reducer compartido. Mantiene `triviaReducer` reflejando
+  *solo* lo que manda el servidor, sin mezclar estado optimista del cliente.
   `subscribeToTrivia(socket, dispatch)` registra los 5 listeners — compartido entre
   `use-room-state` (pantalla) y `use-join-room` (jugador), mismo criterio que ya
   usábamos. El cliente no decide correcta/incorrecta ni arma el orden de turnos: solo
   refleja lo que el servidor manda (`plan.md`).
-  - **Distinción pantalla vs. jugador**: la pantalla recibe siempre `trivia_turn_started`
-    (con la pregunta completa) y lo trata como "mostrar la pregunta de [nombre]", nunca
-    como "puedo responder". El celular de cada jugador, al recibir
-    `trivia_turn_started`, pasa a `my_turn` (interactivo); al recibir
-    `trivia_turn_waiting` en cambio, pasa a `waiting_turn` (según lo defina el consumo
-    del hook — ver abajo, la pantalla ignora `trivia_turn_waiting` para su propia
-    vista porque ya tiene el dato completo por `trivia_turn_started`).
+  - **Distinción pantalla vs. jugador**: no hay dos variantes del reducer — ambos
+    consumidores usan el mismo. La distinción está en qué hace cada componente con la
+    vista resultante: como `trivia_turn_started` (con la pregunta completa) solo llega
+    al socket de la pantalla y al del jugador en turno (nunca a los demás jugadores),
+    recibirlo en el propio socket ya significa "es mi turno" — el celular no necesita
+    comparar `playerId` contra el propio. `play-trivia.tsx` no distingue tampoco
+    `waiting_turn` con `playerId === miPlayerId`: ese caso es instantáneo, el mismo
+    turno llega también como `trivia_turn_started` casi al mismo tiempo y lo pisa.
 - **`trivia-match.spec.ts`**: transiciones del reducer para ambos consumidores (pantalla
   y jugador reciben eventos distintos según a qué se suscribieron).
 
@@ -72,10 +78,12 @@ Ver `spec.md` → "Minijuegos" → "4. Trivia / Preguntados".
 - **`src/components/trivia-countdown.tsx`**: número grande de segundos restantes,
   reutilizable en pantalla y en el celular del jugador en turno.
 - **`src/lib/trivia-sounds.ts`**: helper mínimo — `playCorrectSound()` /
-  `playIncorrectSound()`, un `HTMLAudioElement` por sonido, creado una vez (no en cada
-  render). Dos archivos cortos (a conseguir/generar, formato `.mp3` u `.ogg`) en
-  `public/sounds/`. Se reproducen **solo desde `screen-trivia.tsx`** (el dispositivo
-  del host) — `play-trivia.tsx` nunca los llama, según pide `spec.md`.
+  `playIncorrectSound()`. **Decisión de esta iteración (confirmada con Kalin):**
+  sintetizados con la Web Audio API (osciladores + envolvente corta), no archivos
+  `.mp3`/`.ogg` — evita depender de conseguir assets con licencia clara y el tema de
+  `public/sounds/`. Un solo `AudioContext` lazy, creado en el primer uso. Se
+  reproducen **solo desde `screen-trivia.tsx`** (el dispositivo del host) —
+  `play-trivia.tsx` nunca los llama, según pide `spec.md`.
 
 ### 4. Pantalla — `app/screen/[roomCode]/screen-trivia.tsx`
 
@@ -91,8 +99,9 @@ según `trivia.phase`:
 - `turn_result`: `TriviaOptions` con `correctIndex`/`selectedIndex` resaltados,
   **animación** (una clase CSS con keyframes al entrar — check/cruz grande, sin
   librería nueva) y **sonido** (`playCorrectSound`/`playIncorrectSound` según
-  `resultado.correcta`, disparado una sola vez por resultado con un `useEffect`
-  guardado por `resultado.playerId` + índice de turno para no repetir en re-renders).
+  `resultado.correcta`, en un `useEffect` con `[trivia]` como dependencia — el reducer
+  arma un objeto nuevo en cada `dispatch`, así que corre exactamente una vez por
+  `trivia_turn_result` recibido, sin necesidad de trackear a mano un id de turno).
   La pausa de 2-3s ya la controla el backend (ver `trivia-module/analysis.md`) — el
   frontend no necesita su propio `setTimeout`, solo reacciona a que llegue el próximo
   `trivia_turn_started`.
@@ -161,3 +170,9 @@ Aplica el checklist completo de `testing-strategy.md`, más lo propio de Trivia:
       sin puntos negativos, el turno avanza solo.
 - [ ] F5 en `/screen` o `/play` a mitad de turno: no rompe la sala (ver límite
       explícito arriba — se espera perder el turno en curso, no un crash).
+- [ ] A los 10s de terminar la partida, la pantalla vuelve sola al panel de selección
+      de juego (`specs/features/trivia-results-timeout/analysis.md` +
+      `trivia-results-timeout-ui/analysis.md`).
+- [ ] El marcador de equipos (nombre + puntos acumulados) se ve bien en el panel de
+      selección de juego, en TV/proyector, tanto con 2 equipos (esquinas) como con 3+
+      (franja completa).

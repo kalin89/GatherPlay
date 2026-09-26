@@ -14,7 +14,11 @@ const CATEGORY_LABELS: Record<TriviaCategory, string> = {
 };
 
 const SYSTEM_PROMPT = `Generás preguntas de trivia en español para jugar en familia, en una
-reunión presencial. Cada pregunta debe tener una única respuesta correcta, verificable y
+reunión presencial. Priorizá preguntas interesantes por sobre las más trilladas o
+típicas de un juego de trivia — evitá el primer hecho obvio que se te ocurra sobre el
+tema (ej. no repitas siempre la misma capital, el mismo elemento químico o la misma
+fecha histórica famosa) y variá los subtemas de una pregunta a otra dentro de la
+categoría pedida. Cada pregunta debe tener una única respuesta correcta, verificable y
 sin ambigüedad, y tres opciones incorrectas plausibles pero claramente falsas para quien
 sabe el tema. No repitas preguntas dentro del mismo pedido ni reutilices la misma opción
 incorrecta como si fuera la correcta. El campo "correcta" siempre lleva la respuesta

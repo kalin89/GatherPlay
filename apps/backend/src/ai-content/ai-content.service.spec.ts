@@ -79,7 +79,7 @@ describe('AiContentService', () => {
     expect(generate).not.toHaveBeenCalled();
   });
 
-  it.each([0, -1, 1.5, 21])('cantidad inválida (%s): lanza error y no llama a la IA', async (cantidad) => {
+  it.each([0, -1, 1.5, 51])('cantidad inválida (%s): lanza error y no llama a la IA', async (cantidad) => {
     const generate = vi.fn();
     const service = new AiContentService(fakeGenerator(generate));
 

@@ -25,9 +25,23 @@ const DEFAULT_QUESTION: RawTriviaQuestion = {
 
 const TRIVIA_TURN_SECONDS = 15;
 const TURN_TRANSITION_DELAY_MS = 2500;
+const RESULTS_DISPLAY_MS = 10_000;
 
-function fakeGenerator(raw: RawTriviaQuestion[] = [DEFAULT_QUESTION]): TriviaGenerator {
-  return { generate: vi.fn().mockResolvedValue(raw) };
+// Genera `cantidad` preguntas sintéticas distintas (mismo correcta/incorrectas, pero
+// `pregunta` con un índice) para que AiContentService.isValidBatch las acepte sin caer
+// al banco de respaldo real — necesario ahora que TriviaService pide todas las
+// preguntas de la partida de una sola vez, no una por turno.
+function fakeGenerator(): TriviaGenerator {
+  return {
+    generate: vi.fn(
+      async (_categoria: string, cantidad: number): Promise<RawTriviaQuestion[]> =>
+        Array.from({ length: cantidad }, (_, i) => ({
+          pregunta: `${DEFAULT_QUESTION.pregunta} (${i})`,
+          correcta: DEFAULT_QUESTION.correcta,
+          incorrectas: DEFAULT_QUESTION.incorrectas,
+        })),
+    ),
+  };
 }
 
 interface RoomSetup {
@@ -88,8 +102,8 @@ describe('TriviaService', () => {
     vi.useRealTimers();
   });
 
-  function createTrivia(raw: RawTriviaQuestion[] = [DEFAULT_QUESTION]): TriviaService {
-    const aiContent = new AiContentService(fakeGenerator(raw));
+  function createTrivia(): TriviaService {
+    const aiContent = new AiContentService(fakeGenerator());
     return new TriviaService(rooms, gameEngine, aiContent);
   }
 
@@ -117,7 +131,7 @@ describe('TriviaService', () => {
     const [started] = turnStartedEvents(events);
     expect(started).toMatchObject({
       targetSocketIds: [`${setup.room.code}:screen`, current.socketId],
-      pregunta: '¿2+2?',
+      pregunta: '¿2+2? (0)',
     });
 
     const [waiting] = turnWaitingEvents(events);
@@ -163,10 +177,10 @@ describe('TriviaService', () => {
     const [result] = turnResultEvents(events);
     expect(result).toMatchObject({
       indiceCorrecto: correctIndex,
-      resultado: { playerId: current.playerId, correcta: true, puntos: 100 },
+      resultado: { playerId: current.playerId, correcta: true, puntos: 1 },
     });
     expect(rooms.getRoom(setup.room.code)!.teams.find((t) => t.id === current.teamId)!.score).toBe(
-      100,
+      1,
     );
   });
 
@@ -323,5 +337,107 @@ describe('TriviaService', () => {
         expect.objectContaining({ teamId: setup.teamB.teamId }),
       ]),
     });
+  });
+
+  it('pide todas las preguntas de la partida en una sola llamada, no una por turno', async () => {
+    const setup = createRoomWithTwoSoloTeams(rooms);
+    const generate = vi.fn(
+      async (_categoria: string, cantidad: number): Promise<RawTriviaQuestion[]> =>
+        Array.from({ length: cantidad }, (_, i) => ({
+          pregunta: `${DEFAULT_QUESTION.pregunta} (${i})`,
+          correcta: DEFAULT_QUESTION.correcta,
+          incorrectas: DEFAULT_QUESTION.incorrectas,
+        })),
+    );
+    const aiContent = new AiContentService({ generate });
+    const trivia = new TriviaService(rooms, gameEngine, aiContent);
+    const events: TriviaEvent[] = [];
+    trivia.events$.subscribe((e) => events.push(e));
+
+    trivia.startMatch(setup.room.code);
+
+    for (let turn = 0; turn < 6; turn++) {
+      await vi.advanceTimersByTimeAsync(0);
+      const current = currentTurnPlayer(events, setup);
+      trivia.submitAnswer(setup.room.code, current.socketId, 0);
+      await vi.advanceTimersByTimeAsync(TURN_TRANSITION_DELAY_MS);
+    }
+
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(generate).toHaveBeenCalledWith('general', 6);
+
+    const preguntas = turnStartedEvents(events).map(
+      (e) => (e as { pregunta: string }).pregunta,
+    );
+    expect(new Set(preguntas).size).toBe(preguntas.length);
+  });
+
+  it('a los 10s de terminar la partida, vuelve a la selección de juego sin resetear el puntaje', async () => {
+    const setup = createRoomWithTwoSoloTeams(rooms);
+    rooms.selectGame(setup.room.code, 'trivia');
+    const trivia = createTrivia();
+    const events: TriviaEvent[] = [];
+    trivia.events$.subscribe((e) => events.push(e));
+
+    trivia.startMatch(setup.room.code);
+    for (let turn = 0; turn < 6; turn++) {
+      await vi.advanceTimersByTimeAsync(0);
+      const current = currentTurnPlayer(events, setup);
+      trivia.submitAnswer(setup.room.code, current.socketId, 0);
+      await vi.advanceTimersByTimeAsync(TURN_TRANSITION_DELAY_MS);
+    }
+
+    const scoreBefore = rooms
+      .getRoom(setup.room.code)!
+      .teams.map((t) => ({ id: t.id, score: t.score }));
+
+    await vi.advanceTimersByTimeAsync(RESULTS_DISPLAY_MS - 1);
+    expect(rooms.getRoom(setup.room.code)!.currentGame).toBe('trivia');
+
+    await vi.advanceTimersByTimeAsync(1);
+    const room = rooms.getRoom(setup.room.code)!;
+    expect(room.currentGame).toBeNull();
+    expect(room.teams.map((t) => ({ id: t.id, score: t.score }))).toEqual(scoreBefore);
+  });
+
+  it('el resultado de cada partida trae solo los puntos de esa partida, no el acumulado', async () => {
+    const setup = createRoomWithTwoSoloTeams(rooms);
+    rooms.selectGame(setup.room.code, 'trivia');
+    const trivia = createTrivia();
+    const events: TriviaEvent[] = [];
+    trivia.events$.subscribe((e) => events.push(e));
+
+    async function playMatchAnsweringSiempreCorrecto() {
+      trivia.startMatch(setup.room.code);
+      for (let turn = 0; turn < 6; turn++) {
+        await vi.advanceTimersByTimeAsync(0);
+        const current = currentTurnPlayer(events, setup);
+        const [started] = turnStartedEvents(events).slice(-1);
+        const correctIndex = (started as { opciones: string[] }).opciones.indexOf('4');
+        trivia.submitAnswer(setup.room.code, current.socketId, correctIndex);
+        await vi.advanceTimersByTimeAsync(TURN_TRANSITION_DELAY_MS);
+      }
+      await vi.advanceTimersByTimeAsync(RESULTS_DISPLAY_MS);
+    }
+
+    await playMatchAnsweringSiempreCorrecto();
+    const totalAfterFirst = rooms
+      .getRoom(setup.room.code)!
+      .teams.reduce((sum, t) => sum + t.score, 0);
+    expect(totalAfterFirst).toBe(6); // 6 turnos x 1 punto
+
+    rooms.selectGame(setup.room.code, 'trivia');
+    await playMatchAnsweringSiempreCorrecto();
+
+    const [, secondMatchResult] = matchResultEvents(events);
+    const secondMatchTotal = (
+      secondMatchResult as { scores: { score: number }[] }
+    ).scores.reduce((sum, s) => sum + s.score, 0);
+    expect(secondMatchTotal).toBe(6); // solo lo de la segunda partida, no 12
+
+    const totalAfterSecond = rooms
+      .getRoom(setup.room.code)!
+      .teams.reduce((sum, t) => sum + t.score, 0);
+    expect(totalAfterSecond).toBe(12); // el acumulado real sí duplica
   });
 });

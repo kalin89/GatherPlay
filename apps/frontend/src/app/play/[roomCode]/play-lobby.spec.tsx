@@ -13,6 +13,10 @@ class FakeSocket {
     this.handlers.set(event, handler);
   }
 
+  off(event: string) {
+    this.handlers.delete(event);
+  }
+
   emit(event: string, payload?: unknown) {
     this.emitted.push({ event, payload });
   }
@@ -141,7 +145,7 @@ describe("PlayLobby", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/preparando trivia/i)).toBeInTheDocument();
+      expect(screen.getByText(/esperando a que arranque la partida/i)).toBeInTheDocument();
       expect(screen.queryByText("Rojos")).not.toBeInTheDocument();
     });
   });

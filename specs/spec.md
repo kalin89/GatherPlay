@@ -148,7 +148,7 @@ Preguntas de cultura general por categorías, por turnos individuales: en cada t
 - **Given** el turno de un jugador, **when** selecciona una opción dentro del tiempo límite del turno, **then** su respuesta queda registrada una sola vez (no se puede cambiar), se otorgan puntos fijos a su equipo si es correcta (sin bono por rapidez), y se muestra el resultado en pantalla con una animación y un sonido de acierto o error reproducido desde el dispositivo del host, con una pausa de 2 a 3 segundos antes de continuar.
 - **Given** el turno de un jugador, **when** el tiempo límite del turno llega a cero sin que responda, **then** se cuenta como incorrecta, no se otorgan puntos ni se penaliza con puntos negativos, y se sigue la misma pausa y sonido de "incorrecta" antes de continuar.
 - **Given** un turno recién resuelto, **when** termina la pausa, **then** le toca el turno al integrante correspondiente del equipo contrario, según el reparto de turnos de la partida.
-- **Given** todos los turnos repartidos de ambos equipos ya jugados, **when** eso ocurre, **then** la partida de Trivia pasa a resultados con el puntaje final de cada equipo.
+- **Given** todos los turnos repartidos de ambos equipos ya jugados, **when** eso ocurre, **then** la partida de Trivia pasa a resultados con el puntaje **obtenido en esa partida** de cada equipo (no el acumulado entre partidas — ese se ve en el panel de selección de juego, ver "Motor de sala" → "Selección y arranque de juego").
 
 ### 5. Rosco de palabras (estilo Pasapalabra)
 Preguntas ordenadas por letra del abecedario; se puede pasar y volver.

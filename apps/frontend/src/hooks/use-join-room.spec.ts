@@ -15,6 +15,10 @@ class FakeSocket {
     this.handlers.set(event, handler);
   }
 
+  off(event: string) {
+    this.handlers.delete(event);
+  }
+
   emit(event: string, payload?: unknown) {
     this.emitted.push({ event, payload });
   }
@@ -37,6 +41,10 @@ class FakeSocket {
 
   triggerConnectError() {
     this.handlers.get("connect_error")?.();
+  }
+
+  trigger(event: string, payload?: unknown) {
+    this.handlers.get(event)?.(payload);
   }
 }
 
@@ -143,5 +151,104 @@ describe("useJoinRoom", () => {
     unmount();
 
     expect(socket?.disconnected).toBe(true);
+  });
+
+  it("submitAnswer emite submit_trivia_answer con el código en mayúsculas", () => {
+    const { result } = renderHook(() => useJoinRoom("abcde"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() => result.current.submitAnswer(2));
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "submit_trivia_answer",
+      payload: { code: "ABCDE", opcionIndex: 2 },
+    });
+  });
+
+  it("un error después de joined va a actionError, no saca al jugador de la vista", async () => {
+    const { result } = renderHook(() => useJoinRoom("ABCDE"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() => lastSocket?.triggerRoomState(makeRoom()));
+    await waitFor(() => expect(result.current.status).toBe("joined"));
+
+    act(() => lastSocket?.triggerError({ message: "Ya habías respondido este turno" }));
+
+    await waitFor(() => {
+      expect(result.current.actionError?.message).toBe("Ya habías respondido este turno");
+      expect(result.current.status).toBe("joined");
+      expect(result.current.error).toBeNull();
+    });
+  });
+
+  it("los eventos de trivia actualizan `trivia` vía el reducer compartido", async () => {
+    const { result } = renderHook(() => useJoinRoom("ABCDE"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+
+    act(() =>
+      lastSocket?.trigger("trivia_turn_waiting", {
+        code: "ABCDE",
+        playerId: "p2",
+        playerName: "Beto",
+        teamId: "t2",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.trivia).toEqual({
+        phase: "waiting_turn",
+        playerId: "p2",
+        playerName: "Beto",
+        teamId: "t2",
+      });
+    });
+  });
+
+  it("un room_state con currentGame: null resetea `trivia` a idle", async () => {
+    const { result } = renderHook(() => useJoinRoom("ABCDE"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() =>
+      lastSocket?.trigger("trivia_turn_waiting", {
+        code: "ABCDE",
+        playerId: "p2",
+        playerName: "Beto",
+        teamId: "t2",
+      }),
+    );
+    await waitFor(() => expect(result.current.trivia.phase).toBe("waiting_turn"));
+
+    act(() => lastSocket?.triggerRoomState(makeRoom({ currentGame: null })));
+
+    await waitFor(() => {
+      expect(result.current.trivia).toEqual({ phase: "idle" });
+    });
+  });
+
+  it("un room_state con currentGame no nulo no toca `trivia`", async () => {
+    const { result } = renderHook(() => useJoinRoom("ABCDE"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() =>
+      lastSocket?.trigger("trivia_turn_waiting", {
+        code: "ABCDE",
+        playerId: "p2",
+        playerName: "Beto",
+        teamId: "t2",
+      }),
+    );
+    await waitFor(() => expect(result.current.trivia.phase).toBe("waiting_turn"));
+
+    act(() => lastSocket?.triggerRoomState(makeRoom({ currentGame: "trivia" })));
+
+    await waitFor(() => {
+      expect(result.current.trivia.phase).toBe("waiting_turn");
+    });
   });
 });

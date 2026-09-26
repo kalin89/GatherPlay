@@ -1,9 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
 import { createSocket } from "@/lib/socket";
 import type { GameId, RoomState } from "@/lib/room-types";
+import {
+  initialTriviaMatchView,
+  subscribeToTrivia,
+  triviaReducer,
+  type TriviaMatchView,
+} from "@/lib/trivia-match";
 
 interface RoomError {
   message: string;
@@ -15,6 +21,7 @@ export interface RoomActions {
   assignPlayerToTeam: (playerId: string, teamId: string) => void;
   randomizeTeams: () => void;
   selectGame: (gameId: GameId) => void;
+  startTriviaGame: () => void;
 }
 
 export interface UseRoomStateResult {
@@ -30,6 +37,7 @@ export interface UseRoomStateResult {
    * se reutiliza para emitirlos, así no hace falta abrir una segunda
    * conexión solo para mandar acciones. */
   actions: RoomActions;
+  trivia: TriviaMatchView;
 }
 
 // Se suscribe a una sala como espectador (vía `watch_room`, sin registrarse
@@ -46,12 +54,14 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
   const [error, setError] = useState<RoomError | null>(null);
   const [actionError, setActionError] = useState<RoomError | null>(null);
   const [connecting, setConnecting] = useState(true);
+  const [trivia, dispatchTrivia] = useReducer(triviaReducer, initialTriviaMatchView);
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
     let hasLoaded = false;
     const socket = createSocket();
     socketRef.current = socket;
+    const unsubscribeTrivia = subscribeToTrivia(socket, dispatchTrivia);
 
     socket.on("connect", () => {
       socket.emit("watch_room", { code: roomCode });
@@ -62,6 +72,12 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
       setConnecting(false);
       setError(null);
       setState(room);
+      // Sin juego elegido, la vista de trivia no debe arrastrar el resultado
+      // de una partida anterior — si no, elegir Trivia de nuevo se queda
+      // mostrando el resultado viejo en vez de arrancar.
+      if (room.currentGame === null) {
+        dispatchTrivia({ type: "reset" });
+      }
     });
 
     socket.on("error", (payload: RoomError) => {
@@ -74,6 +90,7 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
     });
 
     return () => {
+      unsubscribeTrivia();
       socket.disconnect();
       socketRef.current = null;
     };
@@ -111,17 +128,23 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
     [roomCode],
   );
 
+  const startTriviaGame = useCallback(() => {
+    socketRef.current?.emit("start_trivia_game", { code: roomCode });
+  }, [roomCode]);
+
   return {
     state,
     error,
     actionError,
     connecting,
+    trivia,
     actions: {
       createTeam,
       removeTeam,
       assignPlayerToTeam,
       randomizeTeams,
       selectGame,
+      startTriviaGame,
     },
   };
 }

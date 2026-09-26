@@ -23,7 +23,7 @@ export class InvalidQuestionCountError extends Error {
 }
 
 const MIN_QUESTIONS = 1;
-const MAX_QUESTIONS = 20;
+const MAX_QUESTIONS = 50;
 const DEFAULT_QUESTIONS = 10;
 
 function isValidRawQuestion(question: RawTriviaQuestion): boolean {
