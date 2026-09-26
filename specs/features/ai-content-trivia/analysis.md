@@ -46,13 +46,23 @@ Carpeta `apps/backend/src/ai-content/`, mismo estilo que `room/` y `game-engine/
   `max_tokens` o `parsed_output` nulo.
 - **`trivia-fallback-bank.ts`**: 20 preguntas por categoría (120 en total), escritas a
   mano, con hechos verificables y no ambiguos.
-- **`ai-content.service.ts`**: `AiContentService.getTriviaQuestions(categoria, cantidad = 10)`.
-  1. Valida categoría (`UnknownTriviaCategoryError`) y cantidad — entero de 1 a 20
+- **`ai-content.service.ts`**: `AiContentService.getTriviaQuestions(categoria, cantidad = 10, excluir = [])`.
+  1. Valida categoría (`UnknownTriviaCategoryError`) y cantidad — entero de 1 a 50
      (`InvalidQuestionCountError`) — antes de tocar la IA.
-  2. Si hay generador configurado, lo intenta; ante cualquier error o un lote inválido
-     (cantidad incorrecta, opciones repetidas dentro de una pregunta, o preguntas
-     repetidas en el lote), cae al banco con un `Logger.warn` — nunca propaga el error.
-  3. El banco devuelve una muestra sin repetir de esa categoría.
+  2. Si hay generador configurado, lo intenta (pasándole `excluir`, ver abajo); ante
+     cualquier error o un lote inválido (cantidad incorrecta, opciones repetidas dentro
+     de una pregunta, o preguntas repetidas en el lote), cae al banco con un
+     `Logger.warn` — nunca propaga el error.
+  3. El banco devuelve una muestra sin repetir de esa categoría, filtrando primero
+     cualquier pregunta que ya esté en `excluir` (comparación normalizada, mismo
+     criterio que la detección de duplicados del lote) — a diferencia del lado IA, acá
+     sí se puede garantizar con código, no es solo una instrucción de prompt.
+  - **`excluir`** (agregado para que `TriviaService` pueda pedirle a la IA que no
+    repita preguntas ya usadas en partidas anteriores de la misma sala — ver
+    `trivia-module/analysis.md`): lista de textos de `pregunta` a evitar. Del lado de
+    la IA es "mejor esfuerzo" (se agrega al mensaje del usuario en
+    `claude-trivia-generator.ts`, el modelo puede igual repetir alguna); del lado del
+    banco de respaldo es exacto.
   4. Baraja las opciones en el servidor (nunca la IA) y calcula `indiceCorrecto`. El
      `random` es un parámetro del constructor (`Math.random` por defecto) para que las
      pruebas sean deterministas.

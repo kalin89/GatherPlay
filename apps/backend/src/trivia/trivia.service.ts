@@ -78,6 +78,9 @@ const RESULTS_DISPLAY_MS = 10_000;
 // Por debajo del MAX_QUESTIONS de AiContentService, sin acoplar ambos módulos —
 // red de seguridad para no pedirle a la IA más de lo que puede dar en un lote.
 const MAX_TRIVIA_QUESTIONS_PER_MATCH = 40;
+// Tope de cuántas preguntas ya usadas se le mandan a la IA como lista de
+// exclusión — para que una sala de vida muy larga no arme un prompt enorme.
+const MAX_TRACKED_QUESTIONS_PER_ROOM = 150;
 
 // Rediseño a turnos individuales — ver specs/features/trivia-module/analysis.md
 // para por qué esto usa RoundTimer directamente en vez de
@@ -86,6 +89,10 @@ const MAX_TRIVIA_QUESTIONS_PER_MATCH = 40;
 @Injectable()
 export class TriviaService implements OnModuleDestroy {
   private readonly matches = new Map<string, TriviaMatchState>();
+  // Preguntas ya usadas en cada sala, entre partidas — en memoria, se pierde
+  // si se reinicia el backend (la memoria persistente entre reinicios es la
+  // tarea de Fase 4 de `content_banks` en Postgres, todavía no hecha).
+  private readonly askedQuestions = new Map<string, string[]>();
   private readonly eventsSubject = new Subject<TriviaEvent>();
   readonly events$: Observable<TriviaEvent> = this.eventsSubject.asObservable();
 
@@ -172,12 +179,18 @@ export class TriviaService implements OnModuleDestroy {
     const match = this.matches.get(code);
     if (!match) return;
 
-    const preguntas = await this.aiContent.getTriviaQuestions(DEFAULT_CATEGORY, count);
+    const excluir = this.askedQuestions.get(code) ?? [];
+    const preguntas = await this.aiContent.getTriviaQuestions(DEFAULT_CATEGORY, count, excluir);
     match.questions = preguntas.map((p) => ({
       pregunta: p.pregunta,
       opciones: p.opciones,
       indiceCorrecto: p.indiceCorrecto,
     }));
+
+    const actualizadas = [...excluir, ...preguntas.map((p) => p.pregunta)].slice(
+      -MAX_TRACKED_QUESTIONS_PER_ROOM,
+    );
+    this.askedQuestions.set(code, actualizadas);
 
     this.startTurn(code);
   }

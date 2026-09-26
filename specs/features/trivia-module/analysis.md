@@ -98,15 +98,24 @@ Estado en memoria: `Map<code, TriviaMatchState>` con
     deja burbujear (menos de 2 equipos con jugadores).
   - Si ya hay una partida en curso en esa sala → `TriviaMatchAlreadyRunningError`.
   - `room.status = 'jugando'` (mutación directa, ver arriba).
-  - Guarda el estado inicial (`currentIndex: 0`, sin pregunta todavía) y llama a
-    `startTurn(code)`.
+  - Guarda el estado inicial (`currentIndex: 0`, sin preguntas todavía) y llama a
+    `loadQuestionsAndStartFirstTurn(code, count)` (`count = min(turns.length, MAX_TRIVIA_QUESTIONS_PER_MATCH)`).
   - Emite `room_state`.
-- **`startTurn(code)`** (privado): pide 1 pregunta a `aiContent.getTriviaQuestions`
-  (categoría fija) **antes** de arrancar el temporizador del turno
-  (constitution.md, principio 5), arma un nuevo `RoundTimer` con
-  `onTick → emit trivia_turn_update`, `onEnd → resolveTurn(code, null)`, y lo arranca
-  con `TRIVIA_TURN_SECONDS`. Resuelve `targetSocketIds` = socket de pantalla(s) +
-  `player.socketId` del turno actual (ver "Cambios de wiring" para cómo se identifica
+- **`loadQuestionsAndStartFirstTurn(code, count)`** (privado, actualizado — antes cada
+  turno pedía su propia pregunta por separado, lo que permitía repetidas entre turnos
+  de una misma partida): pide **todas** las preguntas de la partida de una sola vez a
+  `aiContent.getTriviaQuestions(DEFAULT_CATEGORY, count, excluir)` **antes** de arrancar
+  el primer turno (constitution.md, principio 5). `excluir` es la lista de preguntas ya
+  usadas en esa sala en partidas anteriores (`this.askedQuestions`, en memoria, tope
+  `MAX_TRACKED_QUESTIONS_PER_ROOM`) — se la pasa a la IA para que no las repita (mejor
+  esfuerzo, ver `ai-content-trivia/analysis.md`). Guarda `match.questions` y actualiza
+  `askedQuestions` con las nuevas, después llama a `startTurn(code)`.
+- **`startTurn(code)`** (privado, ya no `async`): lee la pregunta del turno actual de
+  `match.questions[currentIndex % length]` (el `% length` es red de seguridad si el
+  banco de respaldo no alcanzara para una partida enorme), arma un nuevo `RoundTimer`
+  con `onTick → emit trivia_turn_update`, `onEnd → resolveTurn(code, null)`, y lo
+  arranca con `TRIVIA_TURN_SECONDS`. Resuelve `targetSocketIds` = socket de pantalla(s)
+  + `player.socketId` del turno actual (ver "Cambios de wiring" para cómo se identifica
   a la pantalla). Emite `trivia_turn_waiting` (a toda la sala) y `trivia_turn_started`
   (solo a `targetSocketIds`).
 - **`submitAnswer(code, socketId, opcionIndex)`**: identifica al jugador por

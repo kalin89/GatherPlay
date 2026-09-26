@@ -47,6 +47,41 @@ describe('ClaudeTriviaGenerator', () => {
     );
   });
 
+  it('con excluir, el mensaje incluye las preguntas ya usadas', async () => {
+    const parse = vi.fn().mockResolvedValue({
+      stop_reason: 'end_turn',
+      parsed_output: { preguntas: [] },
+    });
+    const generator = new ClaudeTriviaGenerator(fakeClient(parse));
+
+    await generator.generate('general', 3, ['¿Capital de Australia?', '¿Capital de Francia?']);
+
+    expect(parse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          expect.objectContaining({
+            content: expect.stringContaining('¿Capital de Australia?'),
+          }),
+        ],
+      }),
+    );
+    const [{ messages }] = parse.mock.calls[0] as [{ messages: { content: string }[] }];
+    expect(messages[0]!.content).toContain('¿Capital de Francia?');
+  });
+
+  it('sin excluir (u omitido), el mensaje no menciona ninguna lista de exclusión', async () => {
+    const parse = vi.fn().mockResolvedValue({
+      stop_reason: 'end_turn',
+      parsed_output: { preguntas: [] },
+    });
+    const generator = new ClaudeTriviaGenerator(fakeClient(parse));
+
+    await generator.generate('general', 3);
+
+    const [{ messages }] = parse.mock.calls[0] as [{ messages: { content: string }[] }];
+    expect(messages[0]!.content).not.toContain('No repitas ninguna de estas');
+  });
+
   it('lanza TriviaGenerationError si la IA rechaza el pedido (refusal)', async () => {
     const parse = vi.fn().mockResolvedValue({ stop_reason: 'refusal', parsed_output: null });
     const generator = new ClaudeTriviaGenerator(fakeClient(parse));

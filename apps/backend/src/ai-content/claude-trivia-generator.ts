@@ -44,7 +44,18 @@ export class TriviaGenerationError extends Error {
 export class ClaudeTriviaGenerator implements TriviaGenerator {
   constructor(private readonly client: Anthropic) {}
 
-  async generate(categoria: TriviaCategory, cantidad: number): Promise<RawTriviaQuestion[]> {
+  async generate(
+    categoria: TriviaCategory,
+    cantidad: number,
+    excluir: string[] = [],
+  ): Promise<RawTriviaQuestion[]> {
+    const exclusionText =
+      excluir.length > 0
+        ? `\n\nNo repitas ninguna de estas preguntas que ya se usaron antes en esta sala:\n${excluir
+            .map((pregunta) => `- ${pregunta}`)
+            .join('\n')}`
+        : '';
+
     const response = await this.client.messages.parse({
       model: 'claude-haiku-4-5',
       max_tokens: 4096,
@@ -52,7 +63,7 @@ export class ClaudeTriviaGenerator implements TriviaGenerator {
       messages: [
         {
           role: 'user',
-          content: `Generá ${cantidad} preguntas de trivia de ${CATEGORY_LABELS[categoria]}.`,
+          content: `Generá ${cantidad} preguntas de trivia de ${CATEGORY_LABELS[categoria]}.${exclusionText}`,
         },
       ],
       output_config: { format: zodOutputFormat(triviaResponseSchema) },

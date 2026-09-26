@@ -4,6 +4,7 @@ import {
   InvalidQuestionCountError,
   UnknownTriviaCategoryError,
 } from './ai-content.service.js';
+import { getFallbackQuestions } from './trivia-fallback-bank.js';
 import type { TriviaGenerator } from './trivia-generator.js';
 import type { RawTriviaQuestion } from './trivia.types.js';
 
@@ -35,7 +36,7 @@ describe('AiContentService', () => {
       expect(new Set(q.opciones).size).toBe(4);
       expect(q.opciones[q.indiceCorrecto]).toBeDefined();
     }
-    expect(generate).toHaveBeenCalledWith('geografia', 2);
+    expect(generate).toHaveBeenCalledWith('geografia', 2, []);
   });
 
   it('la posición de la opción correcta varía entre preguntas — no la elige la IA', async () => {
@@ -110,6 +111,29 @@ describe('AiContentService', () => {
 
     expect(questions).toHaveLength(1);
     expect(questions[0]!.pregunta).not.toBe('Q1');
+  });
+
+  it('reenvía excluir al generador', async () => {
+    const raw: RawTriviaQuestion[] = [
+      { pregunta: 'Q1', correcta: 'A', incorrectas: ['B', 'C', 'D'] },
+    ];
+    const generate = vi.fn().mockResolvedValue(raw);
+    const service = new AiContentService(fakeGenerator(generate), sequence(0));
+
+    await service.getTriviaQuestions('general', 1, ['Pregunta ya usada antes']);
+
+    expect(generate).toHaveBeenCalledWith('general', 1, ['Pregunta ya usada antes']);
+  });
+
+  it('el banco de respaldo no repite preguntas ya usadas (excluir)', async () => {
+    const pool = getFallbackQuestions('general');
+    const excluir = pool.slice(1).map((q) => q.pregunta); // todas menos la primera
+    const service = new AiContentService(null, sequence(0));
+
+    const questions = await service.getTriviaQuestions('general', 1, excluir);
+
+    expect(questions).toHaveLength(1);
+    expect(questions[0]!.pregunta).toBe(pool[0]!.pregunta);
   });
 
   it('cae al banco si la IA repite la misma pregunta en el lote', async () => {
