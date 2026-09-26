@@ -12,6 +12,11 @@ export const GAME_CATALOG: GameCatalogEntry[] = [
     label: "Trivia",
     description: "Preguntas de cultura general por turnos.",
   },
+  {
+    id: "caras-y-gestos",
+    label: "Caras y Gestos",
+    description: "Mímica en equipos: adivinen tantas palabras como puedan en un minuto.",
+  },
 ];
 
 export function getGameLabel(gameId: GameId): string {

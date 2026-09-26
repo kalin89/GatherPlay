@@ -2,13 +2,20 @@ import { vi } from 'vitest';
 import {
   AiContentService,
   InvalidQuestionCountError,
+  InvalidWordCountError,
   UnknownTriviaCategoryError,
 } from './ai-content.service.js';
 import { getFallbackQuestions } from './trivia-fallback-bank.js';
+import { getFallbackGestureWords } from './gesture-fallback-bank.js';
 import type { TriviaGenerator } from './trivia-generator.js';
+import type { GestureGenerator } from './gesture-generator.js';
 import type { RawTriviaQuestion } from './trivia.types.js';
 
 function fakeGenerator(generate: TriviaGenerator['generate']): TriviaGenerator {
+  return { generate };
+}
+
+function fakeGestureGenerator(generate: GestureGenerator['generate']): GestureGenerator {
   return { generate };
 }
 
@@ -147,5 +154,91 @@ describe('AiContentService', () => {
 
     expect(questions).toHaveLength(2);
     expect(questions.some((q) => q.pregunta === 'Misma pregunta')).toBe(false);
+  });
+});
+
+describe('AiContentService.getGestureWords', () => {
+  it('devuelve la cantidad pedida de palabras sin repetidas cuando la IA responde bien', async () => {
+    const generate = vi.fn().mockResolvedValue(['Elefante', 'Nadar', 'Bombero']);
+    const service = new AiContentService(null, sequence(0), fakeGestureGenerator(generate));
+
+    const palabras = await service.getGestureWords(3);
+
+    expect(palabras).toEqual(['Elefante', 'Nadar', 'Bombero']);
+    expect(generate).toHaveBeenCalledWith(3, []);
+  });
+
+  it('reenvía excluir al generador, tanto en la IA como en el banco', async () => {
+    const generate = vi.fn().mockResolvedValue(['Elefante']);
+    const service = new AiContentService(null, sequence(0), fakeGestureGenerator(generate));
+
+    await service.getGestureWords(1, ['Palabra ya usada']);
+
+    expect(generate).toHaveBeenCalledWith(1, ['Palabra ya usada']);
+  });
+
+  it('cae al banco de respaldo si la IA lanza un error, sin propagarlo', async () => {
+    const generate = vi.fn().mockRejectedValue(new Error('timeout'));
+    const service = new AiContentService(null, sequence(0), fakeGestureGenerator(generate));
+
+    const palabras = await service.getGestureWords(5);
+
+    expect(palabras).toHaveLength(5);
+  });
+
+  it('usa el banco directo, sin llamar a la IA, cuando no hay generador configurado', async () => {
+    const service = new AiContentService(null, sequence(0), null);
+
+    const palabras = await service.getGestureWords(3);
+
+    expect(palabras).toHaveLength(3);
+  });
+
+  it.each([0, -1, 1.5, 51])('cantidad inválida (%s): lanza error y no llama a la IA', async (cantidad) => {
+    const generate = vi.fn();
+    const service = new AiContentService(null, sequence(0), fakeGestureGenerator(generate));
+
+    await expect(service.getGestureWords(cantidad)).rejects.toThrow(InvalidWordCountError);
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it('cae al banco si la IA devuelve menos palabras de las pedidas', async () => {
+    const generate = vi.fn().mockResolvedValue(['Única']);
+    const service = new AiContentService(null, sequence(0), fakeGestureGenerator(generate));
+
+    const palabras = await service.getGestureWords(5);
+
+    expect(palabras).toHaveLength(5);
+  });
+
+  it('cae al banco si la IA repite una palabra dentro del mismo lote', async () => {
+    const generate = vi.fn().mockResolvedValue(['Elefante', 'elefante']);
+    const service = new AiContentService(null, sequence(0), fakeGestureGenerator(generate));
+
+    const palabras = await service.getGestureWords(2);
+
+    expect(palabras).toHaveLength(2);
+    expect(palabras).not.toEqual(['Elefante', 'elefante']);
+  });
+
+  it('cae al banco si la IA devuelve una palabra que está en excluir', async () => {
+    const generate = vi.fn().mockResolvedValue(['Elefante']);
+    const service = new AiContentService(null, sequence(0), fakeGestureGenerator(generate));
+
+    const palabras = await service.getGestureWords(1, ['Elefante']);
+
+    expect(palabras).toHaveLength(1);
+    expect(palabras[0]).not.toBe('Elefante');
+  });
+
+  it('el banco de respaldo no repite palabras ya usadas (excluir)', async () => {
+    const pool = getFallbackGestureWords();
+    const excluir = pool.slice(1).map((palabra) => palabra); // todas menos la primera
+
+    const service = new AiContentService(null, sequence(0), null);
+
+    const palabras = await service.getGestureWords(1, excluir);
+
+    expect(palabras).toEqual([pool[0]]);
   });
 });

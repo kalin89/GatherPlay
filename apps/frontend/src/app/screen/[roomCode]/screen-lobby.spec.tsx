@@ -272,6 +272,17 @@ describe("ScreenLobby", () => {
     });
   });
 
+  it("con Caras y Gestos elegido, muestra su pantalla en vez del lobby", async () => {
+    render(<ScreenLobby roomCode="ABCDE" />);
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(makeRoom({ currentGame: "caras-y-gestos" }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/arrancando caras y gestos/i)).toBeInTheDocument();
+      expect(screen.queryByPlaceholderText("Nombre del equipo")).not.toBeInTheDocument();
+    });
+  });
+
   it("de punta a punta: terminada una partida y vuelto al panel, elegir Trivia de nuevo arranca (no muestra el resultado viejo)", async () => {
     render(<ScreenLobby roomCode="ABCDE" />);
     lastSocket?.triggerConnect();

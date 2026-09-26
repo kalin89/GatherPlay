@@ -134,6 +134,17 @@ describe("useRoomState", () => {
     });
   });
 
+  it("startGestosGame emite start_gestos_game con el código de sala", () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    act(() => result.current.actions.startGestosGame());
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "start_gestos_game",
+      payload: { code: "ABCDE" },
+    });
+  });
+
   it("los eventos de trivia actualizan `trivia` vía el reducer compartido", async () => {
     const { result } = renderHook(() => useRoomState("ABCDE"));
 
@@ -196,6 +207,52 @@ describe("useRoomState", () => {
 
     await waitFor(() => {
       expect(result.current.trivia.phase).toBe("my_turn");
+    });
+  });
+
+  it("los eventos de Caras y Gestos actualizan `gestos` vía el reducer compartido, siempre en waiting_turn (nunca ready_to_start)", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    expect(result.current.gestos).toEqual({ phase: "idle" });
+
+    act(() =>
+      lastSocket?.trigger("gestos_turn_waiting", {
+        code: "ABCDE",
+        playerId: "p1",
+        playerName: "Ana",
+        teamId: "t1",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.gestos).toEqual({
+        phase: "waiting_turn",
+        playerId: "p1",
+        playerName: "Ana",
+        teamId: "t1",
+      });
+    });
+  });
+
+  it("un room_state con currentGame: null resetea `gestos` a idle", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    act(() =>
+      lastSocket?.trigger("gestos_turn_started", {
+        code: "ABCDE",
+        playerId: "p1",
+        playerName: "Ana",
+        palabra: "Elefante",
+        durationSeconds: 60,
+        palabrasRestantes: 5,
+      }),
+    );
+    await waitFor(() => expect(result.current.gestos.phase).toBe("acting"));
+
+    act(() => lastSocket?.triggerRoomState(makeRoom({ currentGame: null })));
+
+    await waitFor(() => {
+      expect(result.current.gestos).toEqual({ phase: "idle" });
     });
   });
 

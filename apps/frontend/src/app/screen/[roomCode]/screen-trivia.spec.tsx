@@ -10,7 +10,7 @@ const { playCorrectSound, playIncorrectSound } = vi.hoisted(() => ({
   playIncorrectSound: vi.fn(),
 }));
 
-vi.mock("@/lib/trivia-sounds", () => ({ playCorrectSound, playIncorrectSound }));
+vi.mock("@/lib/game-sounds", () => ({ playCorrectSound, playIncorrectSound }));
 
 function makeRoom(overrides: Partial<RoomState> = {}): RoomState {
   return {
@@ -35,6 +35,7 @@ function makeActions(overrides: Partial<RoomActions> = {}): RoomActions {
     randomizeTeams: vi.fn(),
     selectGame: vi.fn(),
     startTriviaGame: vi.fn(),
+    startGestosGame: vi.fn(),
     ...overrides,
   };
 }

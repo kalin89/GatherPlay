@@ -6,12 +6,14 @@ import { buildJoinUrl } from "@/lib/join-url";
 import { getGameLabel } from "@/lib/game-catalog";
 import type { GameId, RoomState } from "@/lib/room-types";
 import type { TriviaMatchView } from "@/lib/trivia-match";
+import type { GestosMatchView } from "@/lib/gestos-match";
 import { RoomCode } from "@/components/room-code";
 import { JoinQr } from "@/components/join-qr";
 import { TeamManager } from "./team-manager";
 import { StartMatchButton } from "./start-match-button";
 import { GameSelectionPanel } from "./game-selection-panel";
 import { ScreenTrivia } from "./screen-trivia";
+import { ScreenGestos } from "./screen-gestos";
 import styles from "./screen-lobby.module.css";
 
 // Único lugar que conoce qué juegos tienen de verdad una pantalla propia
@@ -22,10 +24,13 @@ function renderGameScreen(
   state: RoomState,
   actions: RoomActions,
   trivia: TriviaMatchView,
+  gestos: GestosMatchView,
 ): ReactNode {
   switch (gameId) {
     case "trivia":
       return <ScreenTrivia state={state} actions={actions} trivia={trivia} />;
+    case "caras-y-gestos":
+      return <ScreenGestos state={state} actions={actions} gestos={gestos} />;
     default:
       return (
         <main className={styles.page}>
@@ -36,7 +41,7 @@ function renderGameScreen(
 }
 
 export function ScreenLobby({ roomCode }: { roomCode: string }) {
-  const { state, error, actionError, connecting, actions, trivia } = useRoomState(roomCode);
+  const { state, error, actionError, connecting, actions, trivia, gestos } = useRoomState(roomCode);
   const [hasCheckedInitialReveal, setHasCheckedInitialReveal] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [showGamePanel, setShowGamePanel] = useState(false);
@@ -73,7 +78,7 @@ export function ScreenLobby({ roomCode }: { roomCode: string }) {
   }
 
   if (state.currentGame !== null) {
-    return renderGameScreen(state.currentGame, state, actions, trivia);
+    return renderGameScreen(state.currentGame, state, actions, trivia, gestos);
   }
 
   const noTeamHasPlayers = state.teams.every((t) => t.playerIds.length === 0);

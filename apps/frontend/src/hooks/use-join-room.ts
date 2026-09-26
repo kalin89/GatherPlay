@@ -10,6 +10,13 @@ import {
   triviaReducer,
   type TriviaMatchView,
 } from "@/lib/trivia-match";
+import {
+  gestosReducer,
+  initialGestosMatchView,
+  subscribeToGestos,
+  type GestosAction,
+  type GestosMatchView,
+} from "@/lib/gestos-match";
 
 interface RoomError {
   message: string;
@@ -32,8 +39,13 @@ export interface UseJoinRoomResult {
    * `room_state`, solo manda la lista completa. */
   playerId: string | null;
   trivia: TriviaMatchView;
+  /** Versión "jugador" — compara `gestos_turn_waiting.playerId` contra el
+   * propio `playerId` para distinguir `ready_to_start` de `waiting_turn`. */
+  gestos: GestosMatchView;
   join: (name: string) => void;
   submitAnswer: (opcionIndex: number) => void;
+  startGestosTurn: () => void;
+  markGestureWord: (resultado: "adivinada" | "paso") => void;
 }
 
 // Une al jugador a una sala (vía `join_room`) y mantiene el mismo socket
@@ -51,6 +63,10 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
   const [actionError, setActionError] = useState<RoomError | null>(null);
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [trivia, dispatchTrivia] = useReducer(triviaReducer, initialTriviaMatchView);
+  const [gestos, dispatchGestos] = useReducer(
+    (state: GestosMatchView, action: GestosAction) => gestosReducer(state, action, playerId),
+    initialGestosMatchView,
+  );
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
@@ -76,6 +92,7 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
       const socket = createSocket();
       socketRef.current = socket;
       subscribeToTrivia(socket, dispatchTrivia);
+      subscribeToGestos(socket, dispatchGestos);
       let hasJoined = false;
 
       socket.on("connect", () => {
@@ -98,6 +115,7 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
         // arrastrar el resultado de una partida anterior.
         if (room.currentGame === null) {
           dispatchTrivia({ type: "reset" });
+          dispatchGestos({ type: "reset" });
         }
       });
 
@@ -130,5 +148,31 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
     [roomCode],
   );
 
-  return { status, state, error, actionError, playerId, trivia, join, submitAnswer };
+  const startGestosTurn = useCallback(() => {
+    socketRef.current?.emit("start_gestos_turn", { code: roomCode.toUpperCase() });
+  }, [roomCode]);
+
+  const markGestureWord = useCallback(
+    (resultado: "adivinada" | "paso") => {
+      socketRef.current?.emit("mark_gesture_word", {
+        code: roomCode.toUpperCase(),
+        resultado,
+      });
+    },
+    [roomCode],
+  );
+
+  return {
+    status,
+    state,
+    error,
+    actionError,
+    playerId,
+    trivia,
+    gestos,
+    join,
+    submitAnswer,
+    startGestosTurn,
+    markGestureWord,
+  };
 }

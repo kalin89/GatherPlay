@@ -6,8 +6,10 @@ import { splitPlayersByTeam } from "@/lib/room-selectors";
 import { getGameLabel } from "@/lib/game-catalog";
 import type { GameId, RoomState } from "@/lib/room-types";
 import type { TriviaMatchView } from "@/lib/trivia-match";
+import type { GestosMatchView } from "@/lib/gestos-match";
 import { TeamBoard } from "@/components/team-board";
 import { PlayTrivia } from "./play-trivia";
+import { PlayGestos } from "./play-gestos";
 import styles from "./play-lobby.module.css";
 
 const MAX_NAME_LENGTH = 20;
@@ -20,6 +22,9 @@ function renderGameControl(
   playerId: string | null,
   trivia: TriviaMatchView,
   submitAnswer: (opcionIndex: number) => void,
+  gestos: GestosMatchView,
+  startGestosTurn: () => void,
+  markGestureWord: (resultado: "adivinada" | "paso") => void,
   actionError: { message: string } | null,
 ): ReactNode {
   switch (gameId) {
@@ -33,6 +38,17 @@ function renderGameControl(
           actionError={actionError}
         />
       );
+    case "caras-y-gestos":
+      return (
+        <PlayGestos
+          state={state}
+          playerId={playerId}
+          gestos={gestos}
+          startGestosTurn={startGestosTurn}
+          markGestureWord={markGestureWord}
+          actionError={actionError}
+        />
+      );
     default:
       return (
         <main className={styles.page}>
@@ -43,8 +59,19 @@ function renderGameControl(
 }
 
 export function PlayLobby({ roomCode }: { roomCode: string }) {
-  const { status, state, error, actionError, playerId, trivia, join, submitAnswer } =
-    useJoinRoom(roomCode);
+  const {
+    status,
+    state,
+    error,
+    actionError,
+    playerId,
+    trivia,
+    gestos,
+    join,
+    submitAnswer,
+    startGestosTurn,
+    markGestureWord,
+  } = useJoinRoom(roomCode);
   const [name, setName] = useState("");
 
   const trimmedName = name.trim();
@@ -72,6 +99,9 @@ export function PlayLobby({ roomCode }: { roomCode: string }) {
         playerId,
         trivia,
         submitAnswer,
+        gestos,
+        startGestosTurn,
+        markGestureWord,
         actionError,
       );
     }
