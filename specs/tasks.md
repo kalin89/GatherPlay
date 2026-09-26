@@ -37,6 +37,21 @@ Se implementa Trivia primero porque es el más simple de validar (no depende de 
 ## Fase 3 — Resto de minijuegos (uno por tarea, mismo patrón que Trivia)
 
 - [ ] Mímica / Caras y Gestos
+- [ ] Adivina la palabra: generación de palabras con dedup por sala mientras la sala
+      exista. Ver `specs/features/ai-content-adivina-palabra/analysis.md`.
+- [ ] Adivina la palabra (backend): turnos de 30s por integrante alternando equipos
+      (reusa `distributeTurns`), pool de palabras de toda la partida (no por turno),
+      límite de 3 "Paso", resumen verde/rojo por turno y resultado final de la
+      partida. Depende de: `specs/features/ai-content-adivina-palabra/analysis.md` y
+      `specs/features/game-selection/analysis.md`. Ver
+      `specs/features/adivina-palabra-module/analysis.md`.
+- [ ] Adivina la palabra (frontend): pantalla con la palabra + celular del Adivinador
+      con "Listo"/"Adivinada"/"Paso" (nunca ve la palabra), celulares del resto en
+      espera con estado mínimo, sonidos de acierto/error reutilizados de Trivia más
+      sonido de victoria nuevo. Depende de:
+      `specs/features/adivina-palabra-module/analysis.md` y
+      `specs/features/game-selection-ui/analysis.md`. Ver
+      `specs/features/adivina-palabra-ui/analysis.md`.
 - [ ] Tararea y Adivina (requiere manejo de audio en el celular del jugador que tararea)
 - [ ] Dibuja y Adivina (requiere lienzo con trazos en tiempo real, más carga de red que los demás)
 - [ ] Rosco de palabras
@@ -46,7 +61,7 @@ Se implementa Trivia primero porque es el más simple de validar (no depende de 
 - [ ] Cadena de palabras contrarreloj
 - [ ] Memoriza los objetos en la imagen (bloqueada: falta que Kalin agregue el requerimiento en `spec.md` → "Minijuegos" → "10. Memoriza los objetos en la imagen")
 
-Cada una de estas ocho tareas incluye: módulo backend, componentes de pantalla/control, pruebas unitarias de sus reglas específicas, y e2e del camino feliz + el caso límite descrito en spec.md.
+Cada una de estas nueve tareas incluye: módulo backend, componentes de pantalla/control, pruebas unitarias de sus reglas específicas, y e2e del camino feliz + el caso límite descrito en spec.md.
 
 ## Fase 4 — Pulido de sesión completa
 

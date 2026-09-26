@@ -120,6 +120,32 @@ temporizador (constitution.md, principio 5).
 - **Given** una cantidad inválida (menor a 1, mayor a 20, o no entera), **when** se piden
   preguntas, **then** se recibe un error y no se llama a la IA.
 
+## Contenido de IA — Adivina la palabra
+
+`AiContentModule.getAdivinaPalabraWords(cantidad, excluir)` genera las palabras del
+juego "Adivina la palabra" (ver "Minijuegos" → "11. Adivina la palabra") antes de que
+arranque la partida completa, nunca durante el temporizador de un turno
+(constitution.md, principio 5). A diferencia de Trivia, la partida se abastece de una
+sola vez (no turno a turno) y el resultado se acumula por sala mientras la sala exista,
+para poder evitar repetir palabras entre partidas sucesivas del mismo juego en la misma
+sala.
+
+- **Given** una cantidad válida y una lista de palabras a excluir, **when** se piden
+  palabras, **then** se devuelven `cantidad` palabras distintas entre sí y ninguna
+  coincide con la lista de exclusión.
+- **Given** la IA falla, tarda más que el timeout, rechaza el pedido o devuelve
+  contenido inválido (menos palabras de las pedidas, palabras repetidas entre sí, o que
+  coinciden con la exclusión), **when** se piden palabras, **then** se completan con el
+  banco de respaldo hasta la cantidad pedida, sin error hacia quien llama.
+- **Given** no hay credencial de IA configurada, **when** se piden palabras, **then**
+  se usa el banco de respaldo directamente, sin intentar llamar a la IA.
+- **Given** una cantidad inválida (menor a 1 o no entera), **when** se piden palabras,
+  **then** se recibe un error y no se llama a la IA.
+- **Given** el banco de respaldo tampoco tiene suficientes palabras nuevas para cubrir
+  la exclusión pedida, **when** se piden palabras, **then** se devuelven las que se
+  puedan conseguir sin repetir, aunque sean menos que la cantidad pedida (caso límite
+  aceptado: una sesión familiar real no agota un banco de ~150 palabras).
+
 ## Minijuegos
 
 ### 1. Mímica / Caras y Gestos
@@ -187,6 +213,54 @@ _Pendiente: Kalin agrega acá el requerimiento — descripción del juego, regla
 funciona. Sin esto, no se escribe `specs/features/<juego>/analysis.md` ni se empieza
 la tarea correspondiente en Fase 3 de `tasks.md` (regla de `CLAUDE.md`: todo requisito
 nace como criterio de aceptación verificable)._
+
+### 11. Adivina la palabra
+
+Un integrante del equipo (el "Adivinador") debe adivinar la mayor cantidad de palabras
+posible en 30 segundos, mientras el resto de su equipo le da pistas verbales sin decir
+la palabra — leyéndola en la pantalla compartida, que el Adivinador no puede ver (le da
+la espalda). Usa el reparto de turnos compartido ("Reparto de turnos entre jugadores de
+un equipo", en "Motor de sala") con 3 rondas por defecto, alternando entre equipos.
+
+- **Given** la partida recién elegida desde el panel de selección de juego, **when**
+  arranca, **then** el sistema arma el orden completo de turnos (equipo + integrante)
+  para toda la partida y la pantalla muestra de entrada el primer equipo/integrante en
+  turno, sin arrancar el temporizador todavía.
+- **Given** el Adivinador en turno, **when** presiona "Listo" en su celular, **then**
+  arranca el temporizador de 30 segundos de ese turno, la pantalla muestra la primera
+  palabra y el celular del Adivinador muestra únicamente los botones "Adivinada" y
+  "Paso" (nunca la palabra).
+- **Given** un turno en curso, **when** el Adivinador presiona "Adivinada", **then**
+  esa palabra suma 1 punto al equipo, suena el sonido de éxito (reutilizado de Trivia),
+  y la pantalla muestra la siguiente palabra disponible sin pausa.
+- **Given** un turno en curso, **when** el Adivinador presiona "Paso", **then** esa
+  palabra se descarta sin sumar puntos, suena el sonido de fallo (reutilizado de
+  Trivia), y la pantalla muestra la siguiente palabra disponible sin pausa.
+- **Given** un turno en curso, **when** el Adivinador ya pasó 3 palabras, **then** el
+  botón "Paso" se deshabilita en su celular y solo puede seguir presionando "Adivinada"
+  con la palabra actual hasta que se acabe el tiempo.
+- **Given** un turno en curso, **when** otro jugador de la sala (compañero o del equipo
+  contrario) mira su propio celular, **then** ve únicamente el equipo en turno, el
+  nombre del Adivinador y el marcador — nunca la palabra actual.
+- **Given** el temporizador de un turno llega a cero, **when** eso ocurre, **then** la
+  pantalla muestra las palabras adivinadas en verde y las pasadas en rojo (incluida la
+  palabra que haya quedado mostrada sin resolver en ese momento, que se cuenta como
+  pasada), se suman los puntos del turno al marcador de ese equipo (parcial de esta
+  partida), y se muestra "Siguiente Jugador {Nombre}"; el celular de ese siguiente
+  jugador pasa a mostrar su propio botón "Listo".
+- **Given** la pantalla mostrando el resumen de un turno terminado, **when** el
+  siguiente Adivinador todavía no presiona "Listo", **then** la pantalla permanece así
+  indefinidamente (no hay avance automático) hasta que lo presione.
+- **Given** todos los turnos repartidos de la partida ya jugados, **when** eso ocurre,
+  **then** la partida pasa a resultados con el puntaje **obtenido en esa partida** por
+  cada equipo (no el acumulado entre partidas) y las palabras adivinadas por cada
+  equipo, más un sonido distinto para el/los equipo(s) ganador(es).
+- **Given** resultados mostrados, **when** pasan 10 segundos, **then** la sala vuelve
+  sola al panel de selección de juego, igual que Trivia.
+- **Given** una sala donde ya se jugó al menos una partida de "Adivina la palabra",
+  **when** se vuelve a elegir este juego en la misma sala, **then** no se repiten
+  palabras ya usadas en partidas anteriores de esa sala, salvo que se agote el banco
+  disponible (caso límite aceptado).
 
 ## Fuera de alcance (ver constitution.md)
 
