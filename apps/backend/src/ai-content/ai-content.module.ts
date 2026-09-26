@@ -5,6 +5,8 @@ import { ClaudeTriviaGenerator } from './claude-trivia-generator.js';
 import { TRIVIA_GENERATOR, type TriviaGenerator } from './trivia-generator.js';
 import { ClaudeGestureGenerator } from './claude-gesture-generator.js';
 import { GESTURE_GENERATOR, type GestureGenerator } from './gesture-generator.js';
+import { ClaudeWordGenerator } from './claude-word-generator.js';
+import { WORD_GENERATOR, type WordGenerator } from './word-generator.js';
 
 const ANTHROPIC_CLIENT = Symbol('ANTHROPIC_CLIENT');
 
@@ -29,6 +31,12 @@ const ANTHROPIC_CLIENT = Symbol('ANTHROPIC_CLIENT');
       inject: [ANTHROPIC_CLIENT],
       useFactory: (client: Anthropic | null): GestureGenerator | null =>
         client ? new ClaudeGestureGenerator(client) : null,
+    },
+    {
+      provide: WORD_GENERATOR,
+      inject: [ANTHROPIC_CLIENT],
+      useFactory: (client: Anthropic | null): WordGenerator | null =>
+        client ? new ClaudeWordGenerator(client) : null,
     },
     AiContentService,
   ],

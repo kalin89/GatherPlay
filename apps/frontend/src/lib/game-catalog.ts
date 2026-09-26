@@ -17,6 +17,11 @@ export const GAME_CATALOG: GameCatalogEntry[] = [
     label: "Caras y Gestos",
     description: "Mímica en equipos: adivinen tantas palabras como puedan en un minuto.",
   },
+  {
+    id: "adivina-palabra",
+    label: "Adivina la palabra",
+    description: "El Adivinador de turno adivina palabras por pistas verbales de su equipo, sin verlas.",
+  },
 ];
 
 export function getGameLabel(gameId: GameId): string {

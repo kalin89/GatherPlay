@@ -256,6 +256,64 @@ describe("useRoomState", () => {
     });
   });
 
+  it("startAdivinaPalabraGame emite start_adivina_palabra_game con el código de sala", () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    act(() => result.current.actions.startAdivinaPalabraGame());
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "start_adivina_palabra_game",
+      payload: { code: "ABCDE" },
+    });
+  });
+
+  it("los eventos de Adivina la palabra actualizan `adivinaPalabra` vía el reducer compartido", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    expect(result.current.adivinaPalabra).toEqual({ phase: "idle" });
+
+    act(() =>
+      lastSocket?.trigger("adivina_turn_waiting", {
+        code: "ABCDE",
+        playerId: "p1",
+        playerName: "Ana",
+        teamId: "t1",
+        marcador: [{ teamId: "t1", score: 0 }],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.adivinaPalabra).toEqual({
+        phase: "waiting_ready",
+        playerId: "p1",
+        playerName: "Ana",
+        teamId: "t1",
+        marcador: [{ teamId: "t1", score: 0 }],
+      });
+    });
+  });
+
+  it("un room_state con currentGame: null resetea `adivinaPalabra` a idle", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    act(() =>
+      lastSocket?.trigger("adivina_pantalla_estado", {
+        code: "ABCDE",
+        palabra: "Mesa",
+        remainingSeconds: 30,
+        pasesRestantes: 3,
+        ultimaAccion: null,
+      }),
+    );
+    await waitFor(() => expect(result.current.adivinaPalabra.phase).toBe("active_screen"));
+
+    act(() => lastSocket?.triggerRoomState(makeRoom({ currentGame: null })));
+
+    await waitFor(() => {
+      expect(result.current.adivinaPalabra).toEqual({ phase: "idle" });
+    });
+  });
+
   it("un error antes del primer room_state es fatal (error)", async () => {
     const { result } = renderHook(() => useRoomState("ABCDE"));
 

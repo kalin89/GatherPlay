@@ -17,6 +17,12 @@ import {
   type GestosAction,
   type GestosMatchView,
 } from "@/lib/gestos-match";
+import {
+  adivinaPalabraReducer,
+  initialAdivinaPalabraMatchView,
+  subscribeToAdivinaPalabra,
+  type AdivinaPalabraView,
+} from "@/lib/adivina-palabra-match";
 
 interface RoomError {
   message: string;
@@ -42,10 +48,18 @@ export interface UseJoinRoomResult {
   /** Versión "jugador" — compara `gestos_turn_waiting.playerId` contra el
    * propio `playerId` para distinguir `ready_to_start` de `waiting_turn`. */
   gestos: GestosMatchView;
+  /** Versión "jugador" — a diferencia de Gestos, `adivina_turn_waiting`
+   * siempre cae en la misma fase (`waiting_ready`); es `play-adivina-palabra.tsx`
+   * quien compara `playerId` contra el propio para decidir si muestra el
+   * botón "Listo" o el mensaje de espera. */
+  adivinaPalabra: AdivinaPalabraView;
   join: (name: string) => void;
   submitAnswer: (opcionIndex: number) => void;
   startGestosTurn: () => void;
   markGestureWord: (resultado: "adivinada" | "paso") => void;
+  markAdivinaReady: () => void;
+  markAdivinaGuess: () => void;
+  markAdivinaPass: () => void;
 }
 
 // Une al jugador a una sala (vía `join_room`) y mantiene el mismo socket
@@ -66,6 +80,10 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
   const [gestos, dispatchGestos] = useReducer(
     (state: GestosMatchView, action: GestosAction) => gestosReducer(state, action, playerId),
     initialGestosMatchView,
+  );
+  const [adivinaPalabra, dispatchAdivinaPalabra] = useReducer(
+    adivinaPalabraReducer,
+    initialAdivinaPalabraMatchView,
   );
   const socketRef = useRef<Socket | null>(null);
 
@@ -93,6 +111,7 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
       socketRef.current = socket;
       subscribeToTrivia(socket, dispatchTrivia);
       subscribeToGestos(socket, dispatchGestos);
+      subscribeToAdivinaPalabra(socket, dispatchAdivinaPalabra);
       let hasJoined = false;
 
       socket.on("connect", () => {
@@ -116,6 +135,7 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
         if (room.currentGame === null) {
           dispatchTrivia({ type: "reset" });
           dispatchGestos({ type: "reset" });
+          dispatchAdivinaPalabra({ type: "reset" });
         }
       });
 
@@ -162,6 +182,18 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
     [roomCode],
   );
 
+  const markAdivinaReady = useCallback(() => {
+    socketRef.current?.emit("adivina_ready", { code: roomCode.toUpperCase() });
+  }, [roomCode]);
+
+  const markAdivinaGuess = useCallback(() => {
+    socketRef.current?.emit("adivina_guess", { code: roomCode.toUpperCase() });
+  }, [roomCode]);
+
+  const markAdivinaPass = useCallback(() => {
+    socketRef.current?.emit("adivina_pass", { code: roomCode.toUpperCase() });
+  }, [roomCode]);
+
   return {
     status,
     state,
@@ -170,9 +202,13 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
     playerId,
     trivia,
     gestos,
+    adivinaPalabra,
     join,
     submitAnswer,
     startGestosTurn,
     markGestureWord,
+    markAdivinaReady,
+    markAdivinaGuess,
+    markAdivinaPass,
   };
 }

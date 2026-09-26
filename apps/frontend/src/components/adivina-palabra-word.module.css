@@ -1,0 +1,12 @@
+.word {
+  font-size: clamp(48px, 10vw, 120px);
+  font-weight: 800;
+  color: #fff;
+  text-align: center;
+}
+
+.empty {
+  font-size: clamp(24px, 4vw, 40px);
+  color: #94a3b8;
+  text-align: center;
+}
