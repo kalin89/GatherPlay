@@ -36,7 +36,9 @@ Se implementa Trivia primero porque es el más simple de validar (no depende de 
 
 ## Fase 3 — Resto de minijuegos (uno por tarea, mismo patrón que Trivia)
 
-- [ ] Mímica / Caras y Gestos
+- [ ] `AiContentModule.getGestureWords(cantidad, excluir)` para Mímica / Caras y Gestos. Ver `specs/features/ai-content-gestos/analysis.md`.
+- [ ] `CarasYGestosModule` (backend): turnos individuales de 1 minuto con 5 palabras por turno, botón "Iniciar" antes de arrancar el temporizador, palabra visible solo en la pantalla compartida (nunca en ningún celular), puntaje por palabra adivinada. Depende de: `specs/features/ai-content-gestos/analysis.md` y `specs/features/game-selection/analysis.md` (reparto de turnos). Ver `specs/features/caras-y-gestos-module/analysis.md`.
+- [ ] Componentes de pantalla y control para Mímica / Caras y Gestos (frontend): botón "Iniciar" en el celular del actor, palabra + tiempo + progreso en pantalla, botones "Adivinada"/"Paso" en el celular del actor sin la palabra, sonidos de acierto/paso/victoria desde el dispositivo del host, resumen final con palabras adivinadas por equipo. Depende de: `specs/features/caras-y-gestos-module/analysis.md` y `specs/features/game-selection-ui/analysis.md`. Ver `specs/features/caras-y-gestos-ui/analysis.md`.
 - [ ] Tararea y Adivina (requiere manejo de audio en el celular del jugador que tararea)
 - [ ] Dibuja y Adivina (requiere lienzo con trazos en tiempo real, más carga de red que los demás)
 - [ ] Rosco de palabras
