@@ -55,6 +55,7 @@ export class AiContentService {
   async getTriviaQuestions(
     categoria: string,
     cantidad: number = DEFAULT_QUESTIONS,
+    excluir: string[] = [],
   ): Promise<TriviaQuestion[]> {
     if (!(TRIVIA_CATEGORIES as readonly string[]).includes(categoria)) {
       throw new UnknownTriviaCategoryError(categoria);
@@ -64,17 +65,18 @@ export class AiContentService {
     }
 
     const categoriaValida = categoria as TriviaCategory;
-    const raw = await this.generateOrFallback(categoriaValida, cantidad);
+    const raw = await this.generateOrFallback(categoriaValida, cantidad, excluir);
     return raw.map((question) => this.toTriviaQuestion(categoriaValida, question));
   }
 
   private async generateOrFallback(
     categoria: TriviaCategory,
     cantidad: number,
+    excluir: string[],
   ): Promise<RawTriviaQuestion[]> {
     if (this.generator) {
       try {
-        const generated = await this.generator.generate(categoria, cantidad);
+        const generated = await this.generator.generate(categoria, cantidad, excluir);
         if (this.isValidBatch(generated, cantidad)) {
           return generated;
         }
@@ -87,7 +89,7 @@ export class AiContentService {
         );
       }
     }
-    return this.pickFromFallback(categoria, cantidad);
+    return this.pickFromFallback(categoria, cantidad, excluir);
   }
 
   private isValidBatch(questions: RawTriviaQuestion[], cantidad: number): boolean {
@@ -96,8 +98,16 @@ export class AiContentService {
     return !hasDuplicateQuestions(questions);
   }
 
-  private pickFromFallback(categoria: TriviaCategory, cantidad: number): RawTriviaQuestion[] {
-    return this.sample(getFallbackQuestions(categoria), cantidad);
+  private pickFromFallback(
+    categoria: TriviaCategory,
+    cantidad: number,
+    excluir: string[],
+  ): RawTriviaQuestion[] {
+    const yaUsadas = new Set(excluir.map((pregunta) => pregunta.trim().toLowerCase()));
+    const disponibles = getFallbackQuestions(categoria).filter(
+      (q) => !yaUsadas.has(q.pregunta.trim().toLowerCase()),
+    );
+    return this.sample(disponibles, cantidad);
   }
 
   private sample<T>(items: readonly T[], cantidad: number): T[] {

@@ -120,6 +120,28 @@ temporizador (constitution.md, principio 5).
 - **Given** una cantidad inválida (menor a 1, mayor a 20, o no entera), **when** se piden
   preguntas, **then** se recibe un error y no se llama a la IA.
 
+## Contenido de IA — Caras y Gestos
+
+`AiContentModule.getGestureWords(cantidad, excluir)` genera las palabras/frases para
+mímica (ver "Minijuegos" → "1. Mímica / Caras y Gestos") antes de arrancar la partida
+completa (todos los turnos, no turno por turno), nunca durante el temporizador de un
+turno (constitution.md, principio 5). No hay categoría seleccionable — cada pedido
+devuelve una mezcla de tipos (cosa, verbo, objeto, profesión, animal, lugar, personaje,
+etc.), igual que describe el requerimiento original.
+
+- **Given** una cantidad válida, **when** se piden N palabras, **then** se devuelven N
+  palabras o frases cortas, sin repetidas en el lote.
+- **Given** una lista de palabras a excluir (ya usadas antes en la misma sala), **when**
+  se piden palabras nuevas, **then** ninguna de las devueltas coincide con las excluidas,
+  para que una sala que juega varias partidas de este minijuego no repita palabras.
+- **Given** la IA falla, tarda más que el timeout, rechaza el pedido o devuelve contenido
+  inválido, **when** se piden palabras, **then** se devuelven N palabras del banco de
+  respaldo (aplicando el mismo criterio de exclusión), sin error hacia quien llama.
+- **Given** no hay credencial de IA configurada, **when** se piden palabras, **then** se
+  usa el banco de respaldo directamente, sin intentar llamar a la IA.
+- **Given** una cantidad inválida (menor a 1, mayor al máximo permitido por pedido, o no
+  entera), **when** se piden palabras, **then** se recibe un error y no se llama a la IA.
+
 ## Contenido de IA — Adivina la palabra
 
 `AiContentModule.getAdivinaPalabraWords(cantidad, excluir)` genera las palabras del
@@ -149,10 +171,17 @@ sala.
 ## Minijuegos
 
 ### 1. Mímica / Caras y Gestos
-Un jugador de un equipo actúa una palabra o frase sin hablar ni usar objetos; su equipo adivina antes de que se acabe el tiempo.
+Por turnos individuales (usa "Reparto de turnos entre jugadores de un equipo", 3 rondas por defecto — igual que Trivia): a cada integrante le toca un turno de 1 minuto en el que debe hacer mímica de 5 palabras para que su equipo las adivine, sin hablar ni usar objetos. El actor ve la palabra únicamente en la pantalla compartida (host) — nunca en su celular — por eso se para de frente a ella; su equipo se da la espalda a la pantalla para no verla antes de adivinar.
 
-- **Given** un equipo en turno y una palabra asignada al actor, **when** el tiempo llega a cero sin que el equipo acierte, **then** la ronda termina sin puntos y pasa el turno al siguiente equipo.
-- **Given** el equipo en turno, **when** alguien del equipo dice la palabra correcta y el actor confirma desde su celular, **then** se suman los puntos configurados y termina la ronda antes de que se acabe el tiempo.
+- **Given** la partida de Caras y Gestos recién elegida desde el panel de selección de juego, **when** arranca, **then** el sistema elige al azar qué equipo empieza y qué integrante de ese equipo tiene el primer turno, igual que Trivia.
+- **Given** el turno de un jugador, **when** le toca actuar, **then** su celular muestra solo un botón "Iniciar" (sin ninguna palabra) y el resto de los celulares (de su equipo y del equipo contrario) quedan en espera mostrando a quién le toca, sin ninguna palabra tampoco.
+- **Given** el jugador en turno con el botón "Iniciar" en su celular, **when** lo presiona, **then** arranca el temporizador de 1 minuto y la pantalla compartida muestra la primera de sus 5 palabras junto con el tiempo restante descendiendo; el celular del jugador en turno cambia a mostrar únicamente los botones "Adivinada" y "Paso" (nunca la palabra).
+- **Given** una palabra activa durante el turno, **when** el jugador en turno presiona "Adivinada", **then** se otorga 1 punto a su equipo, la palabra queda resuelta (no vuelve a aparecer en este turno) y se muestra la siguiente palabra pendiente, con un sonido de éxito reproducido desde el dispositivo del host.
+- **Given** una palabra activa durante el turno, **when** el jugador en turno presiona "Paso", **then** esa palabra se pospone al final de las pendientes de este turno (puede volver a aparecer si no se acaba el tiempo) y se muestra la siguiente palabra pendiente, con un sonido de "paso" distinto al de acierto, reproducido desde el dispositivo del host.
+- **Given** un turno en curso, **when** las 5 palabras quedan resueltas como "Adivinada" antes de que se acabe el minuto, **then** el turno termina de inmediato con los puntos de las palabras adivinadas (5 en este caso), sin esperar a que se agote el tiempo.
+- **Given** un turno en curso, **when** el minuto llega a cero sin que se hayan adivinado las 5 palabras, **then** el turno termina con los puntos de las palabras adivinadas hasta ese momento únicamente (ej. 3 de 5 adivinadas → 3 puntos), sin penalización por las no adivinadas.
+- **Given** un turno recién resuelto, **when** termina la pausa de transición, **then** le toca el turno al integrante correspondiente del equipo contrario, con la misma dinámica (botón "Iniciar" primero), según el reparto de turnos de la partida.
+- **Given** todos los turnos repartidos de todos los equipos ya jugados, **when** eso ocurre, **then** la partida pasa a resultados mostrando el puntaje obtenido en esa partida por cada equipo y las palabras que adivinó cada uno, con un sonido divertido para el equipo (o equipos) con más puntos.
 
 ### 2. Tararea y Adivina
 Un jugador escucha una canción con audífonos (conectados a su celular) y la tararea o canta sin decir el nombre; su equipo adivina.

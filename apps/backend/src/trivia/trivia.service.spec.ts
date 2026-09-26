@@ -364,12 +364,49 @@ describe('TriviaService', () => {
     }
 
     expect(generate).toHaveBeenCalledTimes(1);
-    expect(generate).toHaveBeenCalledWith('general', 6);
+    expect(generate).toHaveBeenCalledWith('general', 6, []);
 
     const preguntas = turnStartedEvents(events).map(
       (e) => (e as { pregunta: string }).pregunta,
     );
     expect(new Set(preguntas).size).toBe(preguntas.length);
+  });
+
+  it('la segunda partida le pide a la IA que excluya las preguntas de la primera', async () => {
+    const setup = createRoomWithTwoSoloTeams(rooms);
+    rooms.selectGame(setup.room.code, 'trivia');
+    const generate = vi.fn(
+      async (_categoria: string, cantidad: number): Promise<RawTriviaQuestion[]> =>
+        Array.from({ length: cantidad }, (_, i) => ({
+          pregunta: `${DEFAULT_QUESTION.pregunta} (${i})`,
+          correcta: DEFAULT_QUESTION.correcta,
+          incorrectas: DEFAULT_QUESTION.incorrectas,
+        })),
+    );
+    const aiContent = new AiContentService({ generate });
+    const trivia = new TriviaService(rooms, gameEngine, aiContent);
+    const events: TriviaEvent[] = [];
+    trivia.events$.subscribe((e) => events.push(e));
+
+    async function playFullMatch() {
+      trivia.startMatch(setup.room.code);
+      for (let turn = 0; turn < 6; turn++) {
+        await vi.advanceTimersByTimeAsync(0);
+        const current = currentTurnPlayer(events, setup);
+        trivia.submitAnswer(setup.room.code, current.socketId, 0);
+        await vi.advanceTimersByTimeAsync(TURN_TRANSITION_DELAY_MS);
+      }
+      await vi.advanceTimersByTimeAsync(RESULTS_DISPLAY_MS);
+    }
+
+    await playFullMatch();
+    expect(generate).toHaveBeenNthCalledWith(1, 'general', 6, []);
+
+    rooms.selectGame(setup.room.code, 'trivia');
+    await playFullMatch();
+
+    const preguntasPrimeraPartida = Array.from({ length: 6 }, (_, i) => `${DEFAULT_QUESTION.pregunta} (${i})`);
+    expect(generate).toHaveBeenNthCalledWith(2, 'general', 6, preguntasPrimeraPartida);
   });
 
   it('a los 10s de terminar la partida, vuelve a la selección de juego sin resetear el puntaje', async () => {
