@@ -238,10 +238,132 @@ Se da una categoría; cada equipo dice una palabra relacionada y presiona un bot
 
 ### 10. Memoriza los objetos en la imagen
 
-_Pendiente: Kalin agrega acá el requerimiento — descripción del juego, reglas y cómo
-funciona. Sin esto, no se escribe `specs/features/<juego>/analysis.md` ni se empieza
-la tarea correspondiente en Fase 3 de `tasks.md` (regla de `CLAUDE.md`: todo requisito
-nace como criterio de aceptación verificable)._
+Se muestran 20 objetos (imagen + palabra) durante 30 segundos para que ambos equipos
+los memoricen; al ocultarse, cada equipo compite por escribir esos objetos a partir de
+una pista de una sola letra, con su propio reloj de 1:30 minutos que corre en formato
+"reloj de ajedrez" — un equipo a la vez. `GameId = 'memoriza-objetos'`.
+
+**Fuente de las imágenes**: banco curado a mano (igual criterio que las canciones de
+"La Rocola" — ver "Contenido — Memoriza los objetos" más abajo), no generación de
+imágenes por IA en caliente. Cada objeto del tablero es su propio ícono/imagen
+individual dentro de una grilla armada por el frontend — no una única imagen-escena
+con los 20 objetos dibujados juntos.
+
+**Mejora futura (fuera de alcance de esta iteración)**: en vez de una grilla de íconos
+sueltos, mostrar una sola imagen de una escena (ej. una playa, un taller mecánico, un
+circo) con los objetos incrustados naturalmente en ella, más difícil de memorizar. Se
+deja anotado como posible evolución del juego, no se diseña ni se implementa ahora.
+
+- **Given** el host elige "Memoriza los objetos" en el panel de selección de juego,
+  **when** eso ocurre, **then** el sistema arma de inmediato el tablero completo de la
+  partida (20 objetos, cada uno con su imagen, su palabra y qué letra de esa palabra va
+  a quedar visible) y lo entrega a la pantalla y a los celulares, para que la pantalla
+  pueda empezar a precargar las 20 imágenes mientras se muestran las instrucciones —
+  todavía sin arrancar ninguna cuenta regresiva ni mostrar la grilla.
+- **Given** el tablero recién armado, **when** todos los jugadores con equipo asignado
+  presionan "Listo" (convención de toda pantalla de juego), **then** arranca la
+  secuencia del juego automáticamente, empezando por "Pon Mucha Atención".
+- **Given** la fase "Pon Mucha Atención", **when** arranca, **then** la pantalla
+  compartida muestra un texto animado con ese mensaje, reproduce un sonido, y corre una
+  cuenta regresiva de 5 segundos; ningún celular muestra nada del tablero todavía.
+- **Given** la cuenta regresiva de "Pon Mucha Atención" llega a cero, **when** eso
+  ocurre, **then** la pantalla compartida muestra las 20 imágenes (sin ninguna palabra
+  visible, solo el ícono/dibujo de cada objeto, con un tamaño legible para los 20 a la
+  vez) junto con una cuenta regresiva de 30 segundos que no se superpone a ninguna
+  imagen, animadas en 5 tramos consecutivos dentro de esos 30 segundos para hacer más
+  entretenida (y más difícil) la memorización:
+  - **Segundos 0 a 9** (10s): ordenadas en filas y columnas, sin líneas ni bordes de
+    celda visibles (parecen un conjunto prolijo de imágenes, no una tabla).
+  - **Segundos 10 a 14** (5s): todas cambian de posición entre sí una sola vez (barajado),
+    manteniéndose ordenadas en filas y columnas.
+  - **Segundos 15 a 19** (5s): se esparcen libremente por toda la pantalla, sin
+    ajustarse a ninguna grilla ni forma fija, sin salirse nunca del área visible.
+  - **Segundos 20 a 24** (5s): se mueven en círculo, tipo serpiente (manteniendo la
+    misma distancia relativa entre sí mientras se desplazan juntas), a velocidad
+    media — ni muy rápida ni muy lenta.
+  - **Segundos 25 a 29** (5s): se desvanecen (fundido a transparente) hasta
+    desaparecer justo cuando la cuenta regresiva llega a cero.
+  - Es un efecto puramente visual de la pantalla compartida (host) — no afecta el
+    temporizador del servidor ni necesita sincronizarse entre distintos clientes
+    conectados a la misma sala.
+- **Given** la cuenta regresiva de memorización llega a cero, **when** eso ocurre,
+  **then** las imágenes se ocultan y la pantalla compartida muestra la grilla de las 20
+  palabras como pistas de una sola letra cada una (esa letra puede ser la primera, una
+  del medio o la última de la palabra, elegida al azar por palabra y fija el resto de
+  la partida — ej. "M _ _ _ _ _ _" para "Manzana", con la cantidad de letras de esa
+  palabra indicada junto al patrón), y arrancan los relojes de ambos equipos en 1:30
+  minutos (90 segundos) cada uno.
+- **Given** la fase de adivinanza recién arrancada, **when** eso ocurre, **then** el
+  sistema elige al azar qué equipo tiene el primer turno (mismo criterio que Trivia,
+  Caras y Gestos y Adivina la palabra) y qué integrante de ese equipo participa,
+  repartiendo los turnos siguientes entre los integrantes de cada equipo de forma
+  cíclica (no hay un número fijo de turnos por partida, a diferencia del resto de los
+  minijuegos, porque acá lo corta el reloj de cada equipo o que se adivinen las 20
+  palabras).
+- **Given** el jugador en turno, **when** le toca jugar, **then** su celular muestra un
+  campo de texto y un botón "Enviar" (deshabilitado con el campo vacío), y el reloj de
+  su equipo empieza a descender; el resto de los celulares y la pantalla ven quién
+  tiene el turno pero no pueden interactuar con el tablero.
+- **Given** el turno de un jugador recién empezado, **when** pasan 10 segundos sin que
+  haya enviado nada, **then** en su celular se habilita además un botón "Pasar" (hasta
+  ese momento permanece deshabilitado).
+- **Given** el jugador en turno, **when** envía una palabra que coincide (tolerando
+  errores de tipeo, sin necesidad de escribirla exacta) con alguna palabra todavía no
+  revelada del tablero, **then** esa palabra se revela completa en la grilla con el
+  color de su equipo, se otorga 1 punto a su equipo, el reloj de su equipo se detiene y
+  el turno pasa a un integrante del equipo contrario (si ese equipo todavía tiene
+  tiempo en su reloj) o al siguiente integrante de su propio equipo (si el equipo
+  contrario ya se quedó sin tiempo).
+- **Given** el jugador en turno, **when** envía una palabra que no coincide con
+  ninguna palabra pendiente del tablero, **then** no se revela nada ni se otorgan
+  puntos, el reloj de su equipo se detiene igual que si hubiera acertado, y el turno
+  pasa de la misma forma que en el caso anterior — un solo intento por turno, sin
+  poder reintentar aunque su equipo todavía tenga tiempo.
+- **Given** el jugador en turno con el botón "Pasar" ya habilitado, **when** lo
+  presiona sin haber enviado ninguna palabra, **then** no se revela nada ni se otorgan
+  puntos, y el turno pasa de la misma forma que tras un envío.
+- **Given** el reloj de un equipo llega a cero mientras uno de sus integrantes tiene el
+  turno activo, **when** eso ocurre, **then** ese turno termina de inmediato (como si
+  hubiera pasado sin escribir nada) y el turno pasa al equipo contrario si ese equipo
+  todavía tiene tiempo.
+- **Given** el reloj de un equipo ya en cero y el equipo contrario con tiempo restante,
+  **when** eso ocurre, **then** el equipo con tiempo sigue jugando turno tras turno
+  entre sus propios integrantes sin que el reloj del equipo contrario vuelva a
+  intervenir, hasta que su propio reloj llegue a cero o se adivinen todas las palabras
+  pendientes.
+- **Given** la partida en curso, **when** los relojes de ambos equipos llegan a cero, o
+  cuando se revela la última palabra pendiente del tablero (lo que ocurra primero),
+  **then** la partida termina de inmediato.
+- **Given** la partida recién terminada, **when** eso ocurre, **then** la pantalla
+  muestra el resultado final con el puntaje **obtenido en esa partida** por cada
+  equipo (no el acumulado entre partidas), el equipo ganador (o "Empate" si ambos
+  quedaron igual) con un sonido de victoria, y a los 10 segundos la sala vuelve sola al
+  panel de selección de juego — misma convención que Adivina la palabra.
+- **Given** una sala donde ya se jugó al menos una partida de "Memoriza los objetos",
+  **when** se vuelve a elegir este juego en la misma sala, **then** no se repiten
+  objetos ya usados en partidas anteriores de esa sala, salvo que se agote el banco
+  disponible (caso límite aceptado, ver "Contenido — Memoriza los objetos").
+
+## Contenido — Memoriza los objetos
+
+`MemorizaObjetosContentService.selectObjects(cantidad, excluir)` arma el tablero de la
+partida (ver "Minijuegos" → "10. Memoriza los objetos en la imagen") antes de que
+arranque cualquier temporizador, nunca en caliente (`constitution.md`, principio 5).
+Mismo criterio que `RocolaContentService.selectSongs`: es un banco curado a mano
+(objetos cotidianos, en español, con su imagen ya resuelta), no generación por modelo
+de lenguaje ni de imágenes — por eso vive en su propio módulo de contenido,
+`MemorizaObjetosContentModule`, no dentro de `AiContentModule`.
+
+- **Given** una cantidad válida y una lista de objetos a excluir, **when** se piden
+  objetos, **then** se devuelven `cantidad` objetos distintos entre sí, ninguno
+  coincide con la lista de exclusión, y cada uno trae su palabra y la URL de su imagen.
+- **Given** una cantidad inválida (menor a 1 o no entera), **when** se piden objetos,
+  **then** se recibe un error, sin tocar el banco.
+- **Given** el banco no tiene suficientes objetos nuevos para cubrir la exclusión
+  pedida, **when** se piden objetos, **then** se completa reutilizando objetos ya
+  usados en esa sala en vez de arrancar la partida con menos objetos de los que hacen
+  falta (caso límite aceptado: una sesión familiar real no agota un banco de ~150
+  objetos).
 
 ### 11. Adivina la palabra
 

@@ -61,7 +61,25 @@ Se implementa Trivia primero porque es el más simple de validar (no depende de 
 - [ ] ¿Quién es quién?
 - [ ] La Rocola (buzzer de dos jugadores compitiendo)
 - [ ] Cadena de palabras contrarreloj
-- [ ] Memoriza los objetos en la imagen (bloqueada: falta que Kalin agregue el requerimiento en `spec.md` → "Minijuegos" → "10. Memoriza los objetos en la imagen")
+- [ ] Memoriza los objetos: banco curado de objetos (palabra + imagen), sin generación
+      por IA. Ver `specs/features/memoriza-objetos-content/analysis.md`.
+- [ ] Memoriza los objetos (backend): tablero de 20 objetos armado al elegir el juego
+      (precarga), fases "Pon Mucha Atención" (5s) → memorización (30s, solo imagen) →
+      adivinanza con reloj de equipo tipo "reloj de ajedrez" (1:30 c/u, un intento por
+      turno, "Pasar" habilitado a los 10s), fin de partida y resultado. Depende de:
+      `specs/features/memoriza-objetos-content/analysis.md`,
+      `specs/features/game-selection/analysis.md` y **`specs/features/la-rocola-module/analysis.md`**
+      (`ReadyGate`, `answer-matcher.ts` — rama `feat/la-rocola`, todavía sin mergear a
+      `main`; esta tarea no arranca hasta que esa rama esté en `main`). Ver
+      `specs/features/memoriza-objetos-module/analysis.md`.
+- [ ] Memoriza los objetos (frontend): grilla de imágenes (fase de memorización) y de
+      pistas/palabras reveladas (fase de adivinanza), relojes de equipo, precarga de
+      imágenes durante la espera de "Listo", campo de texto + "Enviar"/"Pasar" en el
+      celular del jugador en turno. Depende de:
+      `specs/features/memoriza-objetos-module/analysis.md`,
+      `specs/features/game-selection-ui/analysis.md` y **`specs/features/la-rocola-ui/analysis.md`**
+      (componentes genéricos de convención — misma rama sin mergear que arriba). Ver
+      `specs/features/memoriza-objetos-ui/analysis.md`.
 
 Cada una de estas nueve tareas incluye: módulo backend, componentes de pantalla/control, pruebas unitarias de sus reglas específicas, y e2e del camino feliz + el caso límite descrito en spec.md.
 
