@@ -8,10 +8,12 @@ import type { GameId, RoomState } from "@/lib/room-types";
 import type { TriviaMatchView } from "@/lib/trivia-match";
 import type { GestosMatchView } from "@/lib/gestos-match";
 import type { AdivinaPalabraView } from "@/lib/adivina-palabra-match";
+import type { LaRocolaView } from "@/lib/la-rocola-match";
 import { TeamBoard } from "@/components/team-board";
 import { PlayTrivia } from "./play-trivia";
 import { PlayGestos } from "./play-gestos";
 import { PlayAdivinaPalabra } from "./play-adivina-palabra";
+import { PlayLaRocola } from "./play-la-rocola";
 import styles from "./play-lobby.module.css";
 
 const MAX_NAME_LENGTH = 20;
@@ -31,6 +33,10 @@ function renderGameControl(
   markAdivinaReady: () => void,
   markAdivinaGuess: () => void,
   markAdivinaPass: () => void,
+  laRocola: LaRocolaView,
+  markRocolaReady: () => void,
+  rocolaBuzz: () => void,
+  submitRocolaAnswer: (texto: string) => void,
   actionError: { message: string } | null,
 ): ReactNode {
   switch (gameId) {
@@ -67,6 +73,18 @@ function renderGameControl(
           actionError={actionError}
         />
       );
+    case "la-rocola":
+      return (
+        <PlayLaRocola
+          state={state}
+          playerId={playerId}
+          laRocola={laRocola}
+          markRocolaReady={markRocolaReady}
+          rocolaBuzz={rocolaBuzz}
+          submitRocolaAnswer={submitRocolaAnswer}
+          actionError={actionError}
+        />
+      );
     default:
       return (
         <main className={styles.page}>
@@ -86,6 +104,7 @@ export function PlayLobby({ roomCode }: { roomCode: string }) {
     trivia,
     gestos,
     adivinaPalabra,
+    laRocola,
     join,
     submitAnswer,
     startGestosTurn,
@@ -93,6 +112,9 @@ export function PlayLobby({ roomCode }: { roomCode: string }) {
     markAdivinaReady,
     markAdivinaGuess,
     markAdivinaPass,
+    markRocolaReady,
+    rocolaBuzz,
+    submitRocolaAnswer,
   } = useJoinRoom(roomCode);
   const [name, setName] = useState("");
 
@@ -128,6 +150,10 @@ export function PlayLobby({ roomCode }: { roomCode: string }) {
         markAdivinaReady,
         markAdivinaGuess,
         markAdivinaPass,
+        laRocola,
+        markRocolaReady,
+        rocolaBuzz,
+        submitRocolaAnswer,
         actionError,
       );
     }

@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { useRoomState, type RoomActions } from "@/hooks/use-room-state";
+import { useRoomState, type RoomActions, type UseRoomStateResult } from "@/hooks/use-room-state";
 import { buildJoinUrl } from "@/lib/join-url";
 import { getGameLabel } from "@/lib/game-catalog";
 import type { GameId, RoomState } from "@/lib/room-types";
 import type { TriviaMatchView } from "@/lib/trivia-match";
 import type { GestosMatchView } from "@/lib/gestos-match";
 import type { AdivinaPalabraView } from "@/lib/adivina-palabra-match";
+import type { LaRocolaView } from "@/lib/la-rocola-match";
 import { RoomCode } from "@/components/room-code";
 import { JoinQr } from "@/components/join-qr";
 import { TeamManager } from "./team-manager";
@@ -16,6 +17,7 @@ import { GameSelectionPanel } from "./game-selection-panel";
 import { ScreenTrivia } from "./screen-trivia";
 import { ScreenGestos } from "./screen-gestos";
 import { ScreenAdivinaPalabra } from "./screen-adivina-palabra";
+import { ScreenLaRocola } from "./screen-la-rocola";
 import styles from "./screen-lobby.module.css";
 
 // Único lugar que conoce qué juegos tienen de verdad una pantalla propia
@@ -28,6 +30,10 @@ function renderGameScreen(
   trivia: TriviaMatchView,
   gestos: GestosMatchView,
   adivinaPalabra: AdivinaPalabraView,
+  laRocola: LaRocolaView,
+  laRocolaAudio: UseRoomStateResult["laRocolaAudio"],
+  rocolaArtists: string[] | null,
+  actionError: { message: string } | null,
 ): ReactNode {
   switch (gameId) {
     case "trivia":
@@ -36,6 +42,17 @@ function renderGameScreen(
       return <ScreenGestos state={state} actions={actions} gestos={gestos} />;
     case "adivina-palabra":
       return <ScreenAdivinaPalabra state={state} actions={actions} adivinaPalabra={adivinaPalabra} />;
+    case "la-rocola":
+      return (
+        <ScreenLaRocola
+          state={state}
+          actions={actions}
+          laRocola={laRocola}
+          laRocolaAudio={laRocolaAudio}
+          rocolaArtists={rocolaArtists}
+          actionError={actionError}
+        />
+      );
     default:
       return (
         <main className={styles.page}>
@@ -46,8 +63,19 @@ function renderGameScreen(
 }
 
 export function ScreenLobby({ roomCode }: { roomCode: string }) {
-  const { state, error, actionError, connecting, actions, trivia, gestos, adivinaPalabra } =
-    useRoomState(roomCode);
+  const {
+    state,
+    error,
+    actionError,
+    connecting,
+    actions,
+    trivia,
+    gestos,
+    adivinaPalabra,
+    laRocola,
+    laRocolaAudio,
+    rocolaArtists,
+  } = useRoomState(roomCode);
   const [hasCheckedInitialReveal, setHasCheckedInitialReveal] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [showGamePanel, setShowGamePanel] = useState(false);
@@ -84,7 +112,18 @@ export function ScreenLobby({ roomCode }: { roomCode: string }) {
   }
 
   if (state.currentGame !== null) {
-    return renderGameScreen(state.currentGame, state, actions, trivia, gestos, adivinaPalabra);
+    return renderGameScreen(
+      state.currentGame,
+      state,
+      actions,
+      trivia,
+      gestos,
+      adivinaPalabra,
+      laRocola,
+      laRocolaAudio,
+      rocolaArtists,
+      actionError,
+    );
   }
 
   const noTeamHasPlayers = state.teams.every((t) => t.playerIds.length === 0);

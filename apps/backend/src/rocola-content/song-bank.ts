@@ -1,0 +1,97 @@
+import type { RocolaBankEntry } from './rocola-content.types.js';
+
+// Banco curado de "La Rocola" — canciones reales en español, variadas en
+// género y época (spec.md punto 16). Cada `itunesTrackId` fue resuelto contra
+// la API pública de iTunes (ver `apps/backend/scripts/resolve-rocola-track-ids.ts`)
+// y verificado con preview disponible al momento de escribir este banco.
+// Primera versión: 79 canciones (9-10 por género) — se puede seguir
+// ampliando corriendo el mismo script con títulos nuevos, no hace falta
+// tocar el resto del módulo.
+export const SONG_BANK: RocolaBankEntry[] = [
+  { id: 'cumbia-mil-horas', titulo: 'Mil Horas', artista: 'La Sonora Dinamita', genero: 'cumbia', itunesTrackId: 1444477195 },
+  { id: 'cumbia-cumbia-sampuesana', titulo: 'Cumbia Sampuesana', artista: 'Los Corraleros De Majagual', genero: 'cumbia', itunesTrackId: 1717156297 },
+  { id: 'cumbia-la-colegiala', titulo: 'La Colegiala', artista: 'Rodolfo Aicardi & La Típica RA7', genero: 'cumbia', itunesTrackId: 1824755726 },
+  { id: 'cumbia-el-preso', titulo: 'El Preso', artista: 'Fruko y Sus Tesos & Wilson Saoko', genero: 'cumbia', itunesTrackId: 1821158329 },
+  { id: 'cumbia-la-cumbia-cienaguera', titulo: 'La Cumbia Cienaguera', artista: 'Aniceto Molina', genero: 'cumbia', itunesTrackId: 993358506 },
+  { id: 'cumbia-kumbala', titulo: 'Kumbala', artista: 'Bomba Estéreo', genero: 'cumbia', itunesTrackId: 380672591 },
+  { id: 'cumbia-como-te-voy-a-olvidar', titulo: 'Cómo Te Voy a Olvidar', artista: 'Los Ángeles Azules', genero: 'cumbia', itunesTrackId: 1440898421 },
+  { id: 'cumbia-17-anos', titulo: '17 Años', artista: 'Los Ángeles Azules', genero: 'cumbia', itunesTrackId: 1440927485 },
+  { id: 'cumbia-cumbia-poder', titulo: 'Cumbia Poder', artista: 'Los Ángeles Azules & Nicki Nicole', genero: 'cumbia', itunesTrackId: 1656112521 },
+
+  { id: 'merengue-suavemente', titulo: 'Suavemente', artista: 'Elvis Crespo', genero: 'merengue', itunesTrackId: 187429633 },
+  { id: 'merengue-el-venao', titulo: 'El Venao', artista: 'Wilfrido Vargas', genero: 'merengue', itunesTrackId: 1445571397 },
+  { id: 'merengue-abusadora', titulo: 'Abusadora', artista: 'Wilfrido Vargas', genero: 'merengue', itunesTrackId: 304776748 },
+  { id: 'merengue-el-africano', titulo: 'El Africano', artista: 'Wilfrido Vargas', genero: 'merengue', itunesTrackId: 304776750 },
+  { id: 'merengue-a-que-no-te-atreves', titulo: 'A Que No Te Atreves', artista: 'Alex Bueno', genero: 'merengue', itunesTrackId: 1267312137 },
+  { id: 'merengue-el-tiburon', titulo: 'El Tiburón', artista: 'Proyecto Uno', genero: 'merengue', itunesTrackId: 20845970 },
+  { id: 'merengue-la-bilirrubina', titulo: 'La Bilirrubina', artista: 'Juan Luis Guerra', genero: 'merengue', itunesTrackId: 1560870008 },
+  { id: 'merengue-ojala-que-llueva-cafe', titulo: 'Ojalá Que Llueva Café', artista: 'Juan Luis Guerra', genero: 'merengue', itunesTrackId: 1809222053 },
+  { id: 'merengue-se-fue', titulo: 'Se Fue', artista: 'Fulanito', genero: 'merengue', itunesTrackId: 1648241416 },
+  { id: 'merengue-la-ventanita', titulo: 'La Ventanita', artista: 'Sergio Vargas', genero: 'merengue', itunesTrackId: 304774828 },
+
+  { id: 'salsa-vivir-mi-vida', titulo: 'Vivir Mi Vida', artista: 'Marc Anthony', genero: 'salsa', itunesTrackId: 668743504 },
+  { id: 'salsa-pedro-navaja', titulo: 'Pedro Navaja', artista: 'Willie Colón & Rubén Blades', genero: 'salsa', itunesTrackId: 1464957419 },
+  { id: 'salsa-la-vida-es-un-carnaval', titulo: 'La Vida Es Un Carnaval', artista: 'Celia Cruz', genero: 'salsa', itunesTrackId: 1771348591 },
+  { id: 'salsa-aguanile', titulo: 'Aguanilé', artista: 'Willie Colón & Héctor Lavoe', genero: 'salsa', itunesTrackId: 1464288862 },
+  { id: 'salsa-el-cantante', titulo: 'El Cantante', artista: 'Héctor Lavoe', genero: 'salsa', itunesTrackId: 1465964841 },
+  { id: 'salsa-todo-tiene-su-final', titulo: 'Todo Tiene Su Final', artista: 'Willie Colón & Héctor Lavoe', genero: 'salsa', itunesTrackId: 1464271788 },
+  { id: 'salsa-mi-gente', titulo: 'Mi Gente', artista: 'Willie Colón & Héctor Lavoe', genero: 'salsa', itunesTrackId: 1465964835 },
+  { id: 'salsa-gozadera', titulo: 'Gozadera', artista: 'Gente de Zona', genero: 'salsa', itunesTrackId: 1097132867 },
+  { id: 'salsa-idilio', titulo: 'Idilio', artista: 'Willie Colón', genero: 'salsa', itunesTrackId: 374542161 },
+  { id: 'salsa-lloraras', titulo: 'Llorarás', artista: "Oscar D'León", genero: 'salsa', itunesTrackId: 1444082181 },
+
+  { id: 'balada-besame-mucho', titulo: 'Bésame Mucho', artista: 'Los Panchos', genero: 'balada', itunesTrackId: 465679706 },
+  { id: 'balada-historia-de-un-amor', titulo: 'Historia de un Amor', artista: 'Los Panchos', genero: 'balada', itunesTrackId: 1040872141 },
+  { id: 'balada-amor-eterno', titulo: 'Amor Eterno', artista: 'Juan Gabriel', genero: 'balada', itunesTrackId: 1579558851 },
+  { id: 'balada-un-siglo-sin-ti', titulo: 'Un Siglo Sin Ti', artista: 'Chayanne', genero: 'balada', itunesTrackId: 1089564466 },
+  { id: 'balada-nada-fue-un-error', titulo: 'Nada Fue Un Error', artista: 'Coti, Julieta Venegas & Paulina Rubio', genero: 'balada', itunesTrackId: 1443723184 },
+  { id: 'balada-el-triste', titulo: 'El Triste', artista: 'José José', genero: 'balada', itunesTrackId: 1249008755 },
+  { id: 'balada-amiga-mia', titulo: 'Amiga Mía', artista: 'José José', genero: 'balada', itunesTrackId: 475788320 },
+  { id: 'balada-si-nos-dejan', titulo: 'Si Nos Dejan', artista: 'Luis Miguel', genero: 'balada', itunesTrackId: 121061312 },
+  { id: 'balada-contigo-aprendi', titulo: 'Contigo Aprendí', artista: 'Armando Manzanero', genero: 'balada', itunesTrackId: 253316408 },
+  { id: 'balada-y-como-es-el', titulo: 'Y Cómo Es Él', artista: 'José Luis Perales', genero: 'balada', itunesTrackId: 695509254 },
+
+  { id: 'ranchera-paloma-negra', titulo: 'Paloma Negra', artista: 'Lola Beltrán', genero: 'ranchera', itunesTrackId: 298685351 },
+  { id: 'ranchera-la-bikina', titulo: 'La Bikina', artista: 'Luis Miguel', genero: 'ranchera', itunesTrackId: 42017887 },
+  { id: 'ranchera-hermoso-carino', titulo: 'Hermoso Cariño', artista: 'Vicente Fernández', genero: 'ranchera', itunesTrackId: 322105694 },
+  { id: 'ranchera-que-te-vaya-bonito', titulo: 'Que Te Vaya Bonito', artista: 'José Alfredo Jiménez', genero: 'ranchera', itunesTrackId: 190294539 },
+  { id: 'ranchera-el-rey', titulo: 'El Rey', artista: 'Vicente Fernández', genero: 'ranchera', itunesTrackId: 322130467 },
+  { id: 'ranchera-volver-volver', titulo: 'Volver, Volver', artista: 'Vicente Fernández', genero: 'ranchera', itunesTrackId: 670042314 },
+  { id: 'ranchera-cielito-lindo', titulo: 'Cielito Lindo', artista: 'Pedro Infante', genero: 'ranchera', itunesTrackId: 842442498 },
+  { id: 'ranchera-cucurrucucu-paloma', titulo: 'Cucurrucucú Paloma', artista: 'Lola Beltrán', genero: 'ranchera', itunesTrackId: 1025083007 },
+  { id: 'ranchera-un-rato-nomas', titulo: 'Un Rato Nomás', artista: 'Los Tigres del Norte', genero: 'ranchera', itunesTrackId: 1495269400 },
+  { id: 'ranchera-amorcito-corazon', titulo: 'Amorcito Corazón', artista: 'Pedro Infante', genero: 'ranchera', itunesTrackId: 512760932 },
+
+  { id: 'pop-la-camisa-negra', titulo: 'La Camisa Negra', artista: 'Juanes', genero: 'pop', itunesTrackId: 1492138460 },
+  { id: 'pop-corazon-espinado', titulo: 'Corazón Espinado', artista: 'Santana', genero: 'pop', itunesTrackId: 354579371 },
+  { id: 'pop-bailando', titulo: 'Bailando', artista: 'Enrique Iglesias', genero: 'pop', itunesTrackId: 1440820189 },
+  { id: 'pop-chantaje', titulo: 'Chantaje', artista: 'Shakira', genero: 'pop', itunesTrackId: 1234665569 },
+  { id: 'pop-la-copa-de-la-vida', titulo: 'La Copa de la Vida', artista: 'Ricky Martin', genero: 'pop', itunesTrackId: 192822691 },
+  { id: 'pop-waka-waka', titulo: 'Waka Waka (Esto Es África)', artista: 'Shakira', genero: 'pop', itunesTrackId: 370711731 },
+  { id: 'pop-estoy-aqui', titulo: 'Estoy Aquí', artista: 'Shakira', genero: 'pop', itunesTrackId: 159119897 },
+  { id: 'pop-color-esperanza', titulo: 'Color Esperanza', artista: 'Diego Torres', genero: 'pop', itunesTrackId: 254000385 },
+  { id: 'pop-despacito', titulo: 'Despacito', artista: 'Luis Fonsi & Daddy Yankee', genero: 'pop', itunesTrackId: 1447401620 },
+  { id: 'pop-bidi-bidi-bom-bom', titulo: 'Bidi Bidi Bom Bom', artista: 'Selena', genero: 'pop', itunesTrackId: 1703308137 },
+
+  { id: 'rock-eres', titulo: 'Eres', artista: 'Café Tacvba', genero: 'rock', itunesTrackId: 1444184596 },
+  { id: 'rock-la-flaca', titulo: 'La Flaca', artista: 'Jarabe de Palo', genero: 'rock', itunesTrackId: 726298588 },
+  { id: 'rock-entre-dos-tierras', titulo: 'Entre Dos Tierras', artista: 'Héroes del Silencio', genero: 'rock', itunesTrackId: 700342801 },
+  { id: 'rock-rayando-el-sol', titulo: 'Rayando el Sol', artista: 'Maná', genero: 'rock', itunesTrackId: 42017785 },
+  { id: 'rock-clavado-en-un-bar', titulo: 'Clavado en un Bar', artista: 'Maná', genero: 'rock', itunesTrackId: 1769696866 },
+  { id: 'rock-de-musica-ligera', titulo: 'De Música Ligera', artista: 'Soda Stereo', genero: 'rock', itunesTrackId: 1208783488 },
+  { id: 'rock-persiana-americana', titulo: 'Persiana Americana', artista: 'Soda Stereo', genero: 'rock', itunesTrackId: 321882520 },
+  { id: 'rock-lamento-boliviano', titulo: 'Lamento Boliviano', artista: 'Los Enanitos Verdes', genero: 'rock', itunesTrackId: 724899007 },
+  { id: 'rock-chilanga-banda', titulo: 'Chilanga Banda', artista: 'Café Tacvba', genero: 'rock', itunesTrackId: 358345700 },
+  { id: 'rock-matador', titulo: 'Matador', artista: 'Los Fabulosos Cadillacs', genero: 'rock', itunesTrackId: 297921308 },
+
+  { id: 'popular-fruta-fresca', titulo: 'Fruta Fresca', artista: 'Carlos Vives', genero: 'popular', itunesTrackId: 724352963 },
+  { id: 'popular-la-bicicleta', titulo: 'La Bicicleta', artista: 'Carlos Vives & Shakira', genero: 'popular', itunesTrackId: 1299332776 },
+  { id: 'popular-se-me-olvido-otra-vez', titulo: 'Se Me Olvidó Otra Vez', artista: 'Juan Gabriel', genero: 'popular', itunesTrackId: 190279986 },
+  { id: 'popular-la-gota-fria', titulo: 'La Gota Fría', artista: 'Carlos Vives', genero: 'popular', itunesTrackId: 1543991935 },
+  { id: 'popular-como-la-flor', titulo: 'Como La Flor', artista: 'Selena', genero: 'popular', itunesTrackId: 1806558450 },
+  { id: 'popular-amor-prohibido', titulo: 'Amor Prohibido', artista: 'Selena', genero: 'popular', itunesTrackId: 1703307732 },
+  { id: 'popular-ella-baila-sola', titulo: 'Ella Baila Sola', artista: 'Eslabón Armado & Peso Pluma', genero: 'popular', itunesTrackId: 1677446410 },
+  { id: 'popular-la-incondicional', titulo: 'La Incondicional', artista: 'Luis Miguel', genero: 'popular', itunesTrackId: 101069172 },
+  { id: 'popular-no-se-tu', titulo: 'No Sé Tú', artista: 'Luis Miguel', genero: 'popular', itunesTrackId: 42017932 },
+  { id: 'popular-la-puerta-negra', titulo: 'La Puerta Negra', artista: 'Los Tigres del Norte', genero: 'popular', itunesTrackId: 1403564221 },
+];

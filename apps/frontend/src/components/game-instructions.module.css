@@ -1,0 +1,41 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 480px;
+  padding: 24px 28px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 20px;
+  text-align: left;
+}
+
+.title {
+  font-size: clamp(20px, 3vw, 28px);
+  font-weight: 800;
+  color: #fff;
+  text-align: center;
+}
+
+.bullets {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bullets li {
+  position: relative;
+  padding-left: 22px;
+  font-size: clamp(14px, 1.8vw, 18px);
+  color: rgba(255, 255, 255, 0.92);
+  line-height: 1.4;
+}
+
+.bullets li::before {
+  content: "•";
+  position: absolute;
+  left: 4px;
+  color: #fff;
+}

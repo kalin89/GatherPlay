@@ -1,0 +1,173 @@
+.page {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 32px 20px;
+  background: linear-gradient(-45deg, #7c3aed, #db2777, #0891b2, #7c3aed);
+  background-size: 300% 300%;
+  animation: gradientShift 12s ease infinite;
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.message {
+  font-size: 18px;
+  font-weight: 600;
+  color: #fff;
+  text-align: center;
+  max-width: 320px;
+}
+
+.hint {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.75);
+  text-align: center;
+}
+
+.resultTitle {
+  font-size: 26px;
+  font-weight: 800;
+  color: #fff;
+  text-align: center;
+}
+
+.actionError {
+  padding: 10px 20px;
+  font-size: 14px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 10px;
+}
+
+.buzzButton {
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  border: none;
+  background: #16a34a;
+  color: #fff;
+  font-size: 26px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+}
+
+.buzzButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.answerForm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 340px;
+}
+
+.answerInput {
+  width: 100%;
+  padding: 16px 18px;
+  font-size: 20px;
+  text-align: center;
+  border: none;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1f2937;
+}
+
+.answerInput:disabled {
+  opacity: 0.6;
+}
+
+.submitButton {
+  padding: 16px 40px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  background: #16a34a;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.submitButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.songReveal {
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.85);
+  text-align: center;
+}
+
+.smallCountdown {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+  font-variant-numeric: tabular-nums;
+}
+
+.scoreList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 340px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.scoreRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+}
+
+.myTeam {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.myTeam .teamName,
+.myTeam .teamScore {
+  color: #7c3aed;
+}
+
+.swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.teamName {
+  flex: 1;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.teamScore {
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+}

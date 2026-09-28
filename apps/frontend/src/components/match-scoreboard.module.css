@@ -1,0 +1,30 @@
+.corner {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  z-index: 10;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  font-size: clamp(13px, 1.4vw, 16px);
+  font-weight: 700;
+  color: #1f2937;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}

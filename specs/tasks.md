@@ -61,7 +61,42 @@ Se implementa Trivia primero porque es el más simple de validar (no depende de 
 - [ ] Rosco de palabras
 - [ ] Impostor
 - [ ] ¿Quién es quién?
-- [ ] La Rocola (buzzer de dos jugadores compitiendo)
+- [x] La Rocola: contenido (banco de 79 canciones reales + preview/portada vía
+      iTunes, banco de respaldo, dedup por sala). Ver
+      `specs/features/rocola-content/analysis.md`.
+- [x] La Rocola (backend): buzzer libre, pausa/reanuda canción, robo de punto,
+      revelación de título/artista/portada por ronda, 10 canciones por partida.
+      Depende de: `specs/features/rocola-content/analysis.md`. Ver
+      `specs/features/la-rocola-module/analysis.md`.
+- [ ] La Rocola (frontend): botón "¡Me la sé!", conteo con sonido de reloj, audio desde
+      el host, robo de punto, revelación, y primera implementación de las
+      convenciones de pantalla de juego (instrucciones + "Listo" de todos, marcador en
+      la esquina superior derecha, ganador/empate). Depende de:
+      `specs/features/la-rocola-module/analysis.md` y
+      `specs/features/game-selection-ui/analysis.md`. Ver
+      `specs/features/la-rocola-ui/analysis.md`. Código y pruebas automatizadas en
+      verde — falta la checklist manual (`testing-strategy.md` + la propia de
+      `la-rocola-ui/analysis.md`).
+- [x] La Rocola: filtro opcional por género o artista, elegido por el host antes de
+      arrancar (backend) — `countAvailable`/`getAvailableArtists` en
+      `RocolaContentService`, `filtro` opcional en `LaRocolaService.startMatch`,
+      validación de "no alcanza" antes del `ReadyGate`. Depende de:
+      `specs/features/rocola-content/analysis.md` y
+      `specs/features/la-rocola-module/analysis.md` (sección "Cambio de regla
+      (iteración 3)" de ambos, ya escrita).
+- [ ] La Rocola: filtro opcional por género o artista (frontend) — selector en la
+      pantalla antes de las instrucciones ("Aleatorio"/género/artista de una lista),
+      corrige además que el celular no muestre "Listo" antes de que la partida exista.
+      Depende de la sub-tarea de backend de arriba. Ver
+      `specs/features/la-rocola-ui/analysis.md` (sección "5b. Selector de filtro").
+      Código y pruebas automatizadas en verde — falta la checklist manual
+      (`testing-strategy.md` + la propia de `la-rocola-ui/analysis.md`).
+- [ ] Adaptar Trivia, Caras y Gestos y Adivina la palabra a las convenciones de
+      pantalla de juego (instrucciones + "Listo" de todos, marcador en la esquina
+      superior derecha, ganador/empate) usando los componentes genéricos y el
+      `ReadyGate` construidos en `specs/features/la-rocola-module/analysis.md` /
+      `specs/features/la-rocola-ui/analysis.md` — no requiere volver a abrir esas
+      tareas ya cerradas, solo consumir lo que ya existe.
 - [ ] Cadena de palabras contrarreloj
 - [ ] Memoriza los objetos en la imagen (bloqueada: falta que Kalin agregue el requerimiento en `spec.md` → "Minijuegos" → "10. Memoriza los objetos en la imagen")
 
