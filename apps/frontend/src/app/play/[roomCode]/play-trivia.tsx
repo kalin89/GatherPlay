@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { RoomState } from "@/lib/room-types";
 import type { TriviaMatchView } from "@/lib/trivia-match";
 import { TriviaOptions } from "@/components/trivia-options";
-import { TriviaCountdown } from "@/components/trivia-countdown";
+import { Countdown } from "@/components/countdown";
 import styles from "./play-trivia.module.css";
 
 export function PlayTrivia({
@@ -71,7 +71,7 @@ export function PlayTrivia({
           onSelect={handleSelect}
           selectedIndex={tappedIndex}
         />
-        <TriviaCountdown seconds={trivia.remainingSeconds} />
+        <Countdown seconds={trivia.remainingSeconds} />
       </main>
     );
   }

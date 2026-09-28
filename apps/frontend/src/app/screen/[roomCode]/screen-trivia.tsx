@@ -5,8 +5,8 @@ import type { RoomState } from "@/lib/room-types";
 import type { RoomActions } from "@/hooks/use-room-state";
 import type { TriviaMatchView } from "@/lib/trivia-match";
 import { TriviaOptions } from "@/components/trivia-options";
-import { TriviaCountdown } from "@/components/trivia-countdown";
-import { playCorrectSound, playIncorrectSound } from "@/lib/trivia-sounds";
+import { Countdown } from "@/components/countdown";
+import { playCorrectSound, playIncorrectSound } from "@/lib/game-sounds";
 import styles from "./screen-trivia.module.css";
 
 export function ScreenTrivia({
@@ -67,7 +67,7 @@ export function ScreenTrivia({
         </p>
         <h2 className={styles.question}>{trivia.pregunta}</h2>
         <TriviaOptions opciones={trivia.opciones} />
-        <TriviaCountdown seconds={trivia.remainingSeconds} />
+        <Countdown seconds={trivia.remainingSeconds} />
       </main>
     );
   }

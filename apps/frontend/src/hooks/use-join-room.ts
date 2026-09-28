@@ -10,6 +10,25 @@ import {
   triviaReducer,
   type TriviaMatchView,
 } from "@/lib/trivia-match";
+import {
+  gestosReducer,
+  initialGestosMatchView,
+  subscribeToGestos,
+  type GestosAction,
+  type GestosMatchView,
+} from "@/lib/gestos-match";
+import {
+  adivinaPalabraReducer,
+  initialAdivinaPalabraMatchView,
+  subscribeToAdivinaPalabra,
+  type AdivinaPalabraView,
+} from "@/lib/adivina-palabra-match";
+import {
+  initialLaRocolaMatchView,
+  laRocolaReducer,
+  subscribeToLaRocola,
+  type LaRocolaView,
+} from "@/lib/la-rocola-match";
 
 interface RoomError {
   message: string;
@@ -32,8 +51,25 @@ export interface UseJoinRoomResult {
    * `room_state`, solo manda la lista completa. */
   playerId: string | null;
   trivia: TriviaMatchView;
+  /** Versión "jugador" — compara `gestos_turn_waiting.playerId` contra el
+   * propio `playerId` para distinguir `ready_to_start` de `waiting_turn`. */
+  gestos: GestosMatchView;
+  /** Versión "jugador" — a diferencia de Gestos, `adivina_turn_waiting`
+   * siempre cae en la misma fase (`waiting_ready`); es `play-adivina-palabra.tsx`
+   * quien compara `playerId` contra el propio para decidir si muestra el
+   * botón "Listo" o el mensaje de espera. */
+  adivinaPalabra: AdivinaPalabraView;
+  laRocola: LaRocolaView;
   join: (name: string) => void;
   submitAnswer: (opcionIndex: number) => void;
+  startGestosTurn: () => void;
+  markGestureWord: (resultado: "adivinada" | "paso") => void;
+  markAdivinaReady: () => void;
+  markAdivinaGuess: () => void;
+  markAdivinaPass: () => void;
+  markRocolaReady: () => void;
+  rocolaBuzz: () => void;
+  submitRocolaAnswer: (texto: string) => void;
 }
 
 // Une al jugador a una sala (vía `join_room`) y mantiene el mismo socket
@@ -51,6 +87,15 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
   const [actionError, setActionError] = useState<RoomError | null>(null);
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [trivia, dispatchTrivia] = useReducer(triviaReducer, initialTriviaMatchView);
+  const [gestos, dispatchGestos] = useReducer(
+    (state: GestosMatchView, action: GestosAction) => gestosReducer(state, action, playerId),
+    initialGestosMatchView,
+  );
+  const [adivinaPalabra, dispatchAdivinaPalabra] = useReducer(
+    adivinaPalabraReducer,
+    initialAdivinaPalabraMatchView,
+  );
+  const [laRocola, dispatchLaRocola] = useReducer(laRocolaReducer, initialLaRocolaMatchView);
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
@@ -76,6 +121,9 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
       const socket = createSocket();
       socketRef.current = socket;
       subscribeToTrivia(socket, dispatchTrivia);
+      subscribeToGestos(socket, dispatchGestos);
+      subscribeToAdivinaPalabra(socket, dispatchAdivinaPalabra);
+      subscribeToLaRocola(socket, dispatchLaRocola);
       let hasJoined = false;
 
       socket.on("connect", () => {
@@ -98,6 +146,9 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
         // arrastrar el resultado de una partida anterior.
         if (room.currentGame === null) {
           dispatchTrivia({ type: "reset" });
+          dispatchGestos({ type: "reset" });
+          dispatchAdivinaPalabra({ type: "reset" });
+          dispatchLaRocola({ type: "reset" });
         }
       });
 
@@ -130,5 +181,66 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
     [roomCode],
   );
 
-  return { status, state, error, actionError, playerId, trivia, join, submitAnswer };
+  const startGestosTurn = useCallback(() => {
+    socketRef.current?.emit("start_gestos_turn", { code: roomCode.toUpperCase() });
+  }, [roomCode]);
+
+  const markGestureWord = useCallback(
+    (resultado: "adivinada" | "paso") => {
+      socketRef.current?.emit("mark_gesture_word", {
+        code: roomCode.toUpperCase(),
+        resultado,
+      });
+    },
+    [roomCode],
+  );
+
+  const markAdivinaReady = useCallback(() => {
+    socketRef.current?.emit("adivina_ready", { code: roomCode.toUpperCase() });
+  }, [roomCode]);
+
+  const markAdivinaGuess = useCallback(() => {
+    socketRef.current?.emit("adivina_guess", { code: roomCode.toUpperCase() });
+  }, [roomCode]);
+
+  const markAdivinaPass = useCallback(() => {
+    socketRef.current?.emit("adivina_pass", { code: roomCode.toUpperCase() });
+  }, [roomCode]);
+
+  const markRocolaReady = useCallback(() => {
+    socketRef.current?.emit("rocola_ready", { code: roomCode.toUpperCase() });
+  }, [roomCode]);
+
+  const rocolaBuzz = useCallback(() => {
+    socketRef.current?.emit("rocola_buzz", { code: roomCode.toUpperCase() });
+  }, [roomCode]);
+
+  const submitRocolaAnswer = useCallback(
+    (texto: string) => {
+      socketRef.current?.emit("rocola_submit_answer", { code: roomCode.toUpperCase(), texto });
+    },
+    [roomCode],
+  );
+
+  return {
+    status,
+    state,
+    error,
+    actionError,
+    playerId,
+    trivia,
+    gestos,
+    adivinaPalabra,
+    laRocola,
+    join,
+    submitAnswer,
+    startGestosTurn,
+    markGestureWord,
+    markAdivinaReady,
+    markAdivinaGuess,
+    markAdivinaPass,
+    markRocolaReady,
+    rocolaBuzz,
+    submitRocolaAnswer,
+  };
 }

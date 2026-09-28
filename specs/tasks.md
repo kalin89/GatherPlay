@@ -36,12 +36,12 @@ Se implementa Trivia primero porque es el más simple de validar (no depende de 
 
 ## Fase 3 — Resto de minijuegos (uno por tarea, mismo patrón que Trivia)
 
-- [ ] `AiContentModule.getGestureWords(cantidad, excluir)` para Mímica / Caras y Gestos. Ver `specs/features/ai-content-gestos/analysis.md`.
-- [ ] `CarasYGestosModule` (backend): turnos individuales de 1 minuto con 5 palabras por turno, botón "Iniciar" antes de arrancar el temporizador, palabra visible solo en la pantalla compartida (nunca en ningún celular), puntaje por palabra adivinada. Depende de: `specs/features/ai-content-gestos/analysis.md` y `specs/features/game-selection/analysis.md` (reparto de turnos). Ver `specs/features/caras-y-gestos-module/analysis.md`.
-- [ ] Componentes de pantalla y control para Mímica / Caras y Gestos (frontend): botón "Iniciar" en el celular del actor, palabra + tiempo + progreso en pantalla, botones "Adivinada"/"Paso" en el celular del actor sin la palabra, sonidos de acierto/paso/victoria desde el dispositivo del host, resumen final con palabras adivinadas por equipo. Depende de: `specs/features/caras-y-gestos-module/analysis.md` y `specs/features/game-selection-ui/analysis.md`. Ver `specs/features/caras-y-gestos-ui/analysis.md`.
-- [ ] Adivina la palabra: generación de palabras con dedup por sala mientras la sala
+- [x] `AiContentModule.getGestureWords(cantidad, excluir)` para Mímica / Caras y Gestos. Ver `specs/features/ai-content-gestos/analysis.md`.
+- [x] `CarasYGestosModule` (backend): turnos individuales de 1 minuto con 5 palabras por turno, botón "Iniciar" antes de arrancar el temporizador, palabra visible solo en la pantalla compartida (nunca en ningún celular), puntaje por palabra adivinada. Depende de: `specs/features/ai-content-gestos/analysis.md` y `specs/features/game-selection/analysis.md` (reparto de turnos). Ver `specs/features/caras-y-gestos-module/analysis.md`.
+- [ ] Componentes de pantalla y control para Mímica / Caras y Gestos (frontend): botón "Iniciar" en el celular del actor, palabra + tiempo + progreso en pantalla, botones "Adivinada"/"Paso" en el celular del actor sin la palabra, sonidos de acierto/paso/victoria desde el dispositivo del host, resumen final con palabras adivinadas por equipo. Depende de: `specs/features/caras-y-gestos-module/analysis.md` y `specs/features/game-selection-ui/analysis.md`. Ver `specs/features/caras-y-gestos-ui/analysis.md`. Código y pruebas automatizadas en verde — falta la checklist manual completa de `specs/features/caras-y-gestos-ui/analysis.md`.
+- [x] Adivina la palabra: generación de palabras con dedup por sala mientras la sala
       exista. Ver `specs/features/ai-content-adivina-palabra/analysis.md`.
-- [ ] Adivina la palabra (backend): turnos de 30s por integrante alternando equipos
+- [x] Adivina la palabra (backend): turnos de 30s por integrante alternando equipos
       (reusa `distributeTurns`), pool de palabras de toda la partida (no por turno),
       límite de 3 "Paso", resumen verde/rojo por turno y resultado final de la
       partida. Depende de: `specs/features/ai-content-adivina-palabra/analysis.md` y
@@ -53,13 +53,50 @@ Se implementa Trivia primero porque es el más simple de validar (no depende de 
       sonido de victoria nuevo. Depende de:
       `specs/features/adivina-palabra-module/analysis.md` y
       `specs/features/game-selection-ui/analysis.md`. Ver
-      `specs/features/adivina-palabra-ui/analysis.md`.
+      `specs/features/adivina-palabra-ui/analysis.md`. Código y pruebas automatizadas
+      en verde — falta la checklist manual (`testing-strategy.md` + la propia de
+      `adivina-palabra-ui/analysis.md`).
 - [ ] Tararea y Adivina (requiere manejo de audio en el celular del jugador que tararea)
 - [ ] Dibuja y Adivina (requiere lienzo con trazos en tiempo real, más carga de red que los demás)
 - [ ] Rosco de palabras
 - [ ] Impostor
 - [ ] ¿Quién es quién?
-- [ ] La Rocola (buzzer de dos jugadores compitiendo)
+- [x] La Rocola: contenido (banco de 79 canciones reales + preview/portada vía
+      iTunes, banco de respaldo, dedup por sala). Ver
+      `specs/features/rocola-content/analysis.md`.
+- [x] La Rocola (backend): buzzer libre, pausa/reanuda canción, robo de punto,
+      revelación de título/artista/portada por ronda, 10 canciones por partida.
+      Depende de: `specs/features/rocola-content/analysis.md`. Ver
+      `specs/features/la-rocola-module/analysis.md`.
+- [ ] La Rocola (frontend): botón "¡Me la sé!", conteo con sonido de reloj, audio desde
+      el host, robo de punto, revelación, y primera implementación de las
+      convenciones de pantalla de juego (instrucciones + "Listo" de todos, marcador en
+      la esquina superior derecha, ganador/empate). Depende de:
+      `specs/features/la-rocola-module/analysis.md` y
+      `specs/features/game-selection-ui/analysis.md`. Ver
+      `specs/features/la-rocola-ui/analysis.md`. Código y pruebas automatizadas en
+      verde — falta la checklist manual (`testing-strategy.md` + la propia de
+      `la-rocola-ui/analysis.md`).
+- [x] La Rocola: filtro opcional por género o artista, elegido por el host antes de
+      arrancar (backend) — `countAvailable`/`getAvailableArtists` en
+      `RocolaContentService`, `filtro` opcional en `LaRocolaService.startMatch`,
+      validación de "no alcanza" antes del `ReadyGate`. Depende de:
+      `specs/features/rocola-content/analysis.md` y
+      `specs/features/la-rocola-module/analysis.md` (sección "Cambio de regla
+      (iteración 3)" de ambos, ya escrita).
+- [ ] La Rocola: filtro opcional por género o artista (frontend) — selector en la
+      pantalla antes de las instrucciones ("Aleatorio"/género/artista de una lista),
+      corrige además que el celular no muestre "Listo" antes de que la partida exista.
+      Depende de la sub-tarea de backend de arriba. Ver
+      `specs/features/la-rocola-ui/analysis.md` (sección "5b. Selector de filtro").
+      Código y pruebas automatizadas en verde — falta la checklist manual
+      (`testing-strategy.md` + la propia de `la-rocola-ui/analysis.md`).
+- [ ] Adaptar Trivia, Caras y Gestos y Adivina la palabra a las convenciones de
+      pantalla de juego (instrucciones + "Listo" de todos, marcador en la esquina
+      superior derecha, ganador/empate) usando los componentes genéricos y el
+      `ReadyGate` construidos en `specs/features/la-rocola-module/analysis.md` /
+      `specs/features/la-rocola-ui/analysis.md` — no requiere volver a abrir esas
+      tareas ya cerradas, solo consumir lo que ya existe.
 - [ ] Cadena de palabras contrarreloj
 - [ ] Memoriza los objetos: banco curado de objetos (palabra + imagen), sin generación
       por IA. Ver `specs/features/memoriza-objetos-content/analysis.md`.
@@ -85,10 +122,10 @@ Cada una de estas nueve tareas incluye: módulo backend, componentes de pantalla
 
 ## Fase 4 — Pulido de sesión completa
 
-- [ ] Selector de "siguiente juego" entre ronda y ronda, sin tener que recrear la sala. (El panel para elegir el primer juego, tras armar equipos, ya se construye en Fase 2 — esta tarea es reutilizar/extender esa misma base para la transición entre partidas sucesivas.)
-- [ ] Marcador acumulado visible entre minijuegos.
+- [x] Selector de "siguiente juego" entre ronda y ronda, sin tener que recrear la sala. (El panel para elegir el primer juego, tras armar equipos, ya se construye en Fase 2 — esta tarea es reutilizar/extender esa misma base para la transición entre partidas sucesivas.)
+- [x] Marcador acumulado visible entre minijuegos.
 - [ ] Manejo de reconexión (un jugador pierde señal y vuelve a entrar con el mismo código sin perder su lugar en el equipo).
-- [ ] Persistir preguntas generadas por IA en `content_banks` (Postgres) para reusarlas y como respaldo creciente. Depende de: `specs/features/ai-content-trivia/analysis.md`.
+- [x] Persistir preguntas generadas por IA en `content_banks` (Postgres) para reusarlas y como respaldo creciente. Depende de: `specs/features/ai-content-trivia/analysis.md`.
 - [ ] Limpieza de salas abandonadas: hoy una sala nunca se borra del `Map` en memoria de `RoomModule` — ni cuando el host se desconecta (no se detecta, no es un `Player`) ni cuando se van todos los jugadores. Definir un criterio de expiración/limpieza (ej. TTL de inactividad) para no acumular estado indefinidamente en el proceso.
 
 ## Explícitamente no en el backlog de v1

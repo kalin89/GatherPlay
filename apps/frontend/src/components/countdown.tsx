@@ -1,8 +1,8 @@
-import styles from "./trivia-countdown.module.css";
+import styles from "./countdown.module.css";
 
 const URGENT_THRESHOLD_SECONDS = 5;
 
-export function TriviaCountdown({ seconds }: { seconds: number }) {
+export function Countdown({ seconds }: { seconds: number }) {
   const urgent = seconds <= URGENT_THRESHOLD_SECONDS;
 
   return (

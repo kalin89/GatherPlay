@@ -51,3 +51,33 @@ export function playIncorrectSound(): void {
   if (!context) return;
   playTone(context, 150, context.currentTime, 0.3, "sawtooth");
 }
+
+// Un solo tono medio, neutro — ni la envolvente ascendente de
+// playCorrectSound ni el tono grave de playIncorrectSound (acá no hay
+// "incorrecta", solo adivinada/paso/tiempo agotado).
+export function playPassSound(): void {
+  const context = getAudioContext();
+  if (!context) return;
+  playTone(context, 350, context.currentTime, 0.15, "sine");
+}
+
+// Tic corto y seco, pensado para repetirse una vez por segundo durante un
+// conteo regresivo (La Rocola) sin cansar el oído — distinto de los otros
+// tres, que marcan un resultado, no el paso del tiempo.
+export function playTickSound(): void {
+  const context = getAudioContext();
+  if (!context) return;
+  playTone(context, 880, context.currentTime, 0.06, "square");
+}
+
+// Jingle corto (4 notas ascendentes, C5 → E5 → G5 → C6), más largo que los
+// otros dos — para el equipo ganador al terminar la partida.
+export function playVictorySound(): void {
+  const context = getAudioContext();
+  if (!context) return;
+  const now = context.currentTime;
+  playTone(context, 523.25, now, 0.15, "sine");
+  playTone(context, 659.25, now + 0.12, 0.15, "sine");
+  playTone(context, 783.99, now + 0.24, 0.15, "sine");
+  playTone(context, 1046.5, now + 0.36, 0.35, "sine");
+}

@@ -1,12 +1,26 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { TRIVIA_GENERATOR, type TriviaGenerator } from './trivia-generator.js';
 import { getFallbackQuestions } from './trivia-fallback-bank.js';
+import { GESTURE_GENERATOR, type GestureGenerator } from './gesture-generator.js';
+import { getFallbackGestureWords } from './gesture-fallback-bank.js';
+import { WORD_GENERATOR, type WordGenerator } from './word-generator.js';
+import { getFallbackAdivinaWords } from './word-fallback-bank.js';
 import {
   TRIVIA_CATEGORIES,
   type RawTriviaQuestion,
   type TriviaCategory,
   type TriviaQuestion,
 } from './trivia.types.js';
+import {
+  MAX_GESTURE_WORDS_PER_REQUEST,
+  MIN_GESTURE_WORDS,
+  type GestureWord,
+} from './gestos.types.js';
+import {
+  MAX_ADIVINA_WORDS_PER_REQUEST,
+  MIN_ADIVINA_WORDS,
+  type AdivinaWord,
+} from './adivina-palabra.types.js';
 
 export class UnknownTriviaCategoryError extends Error {
   constructor(categoria: string) {
@@ -19,6 +33,13 @@ export class InvalidQuestionCountError extends Error {
   constructor(cantidad: number) {
     super(`Cantidad de preguntas inválida: ${cantidad}`);
     this.name = 'InvalidQuestionCountError';
+  }
+}
+
+export class InvalidWordCountError extends Error {
+  constructor(cantidad: number) {
+    super(`Cantidad de palabras inválida: ${cantidad}`);
+    this.name = 'InvalidWordCountError';
   }
 }
 
@@ -50,6 +71,12 @@ export class AiContentService {
   constructor(
     @Inject(TRIVIA_GENERATOR) private readonly generator: TriviaGenerator | null,
     @Optional() private readonly random: () => number = Math.random,
+    @Optional()
+    @Inject(GESTURE_GENERATOR)
+    private readonly gestureGenerator: GestureGenerator | null = null,
+    @Optional()
+    @Inject(WORD_GENERATOR)
+    private readonly wordGenerator: WordGenerator | null = null,
   ) {}
 
   async getTriviaQuestions(
@@ -67,6 +94,122 @@ export class AiContentService {
     const categoriaValida = categoria as TriviaCategory;
     const raw = await this.generateOrFallback(categoriaValida, cantidad, excluir);
     return raw.map((question) => this.toTriviaQuestion(categoriaValida, question));
+  }
+
+  async getGestureWords(
+    cantidad: number,
+    excluir: string[] = [],
+  ): Promise<GestureWord[]> {
+    if (
+      !Number.isInteger(cantidad) ||
+      cantidad < MIN_GESTURE_WORDS ||
+      cantidad > MAX_GESTURE_WORDS_PER_REQUEST
+    ) {
+      throw new InvalidWordCountError(cantidad);
+    }
+
+    return this.generateGestureWordsOrFallback(cantidad, excluir);
+  }
+
+  async getAdivinaPalabraWords(
+    cantidad: number,
+    excluir: string[] = [],
+  ): Promise<AdivinaWord[]> {
+    if (
+      !Number.isInteger(cantidad) ||
+      cantidad < MIN_ADIVINA_WORDS ||
+      cantidad > MAX_ADIVINA_WORDS_PER_REQUEST
+    ) {
+      throw new InvalidWordCountError(cantidad);
+    }
+
+    return this.generateAdivinaWordsOrFallback(cantidad, excluir);
+  }
+
+  private async generateAdivinaWordsOrFallback(
+    cantidad: number,
+    excluir: string[],
+  ): Promise<AdivinaWord[]> {
+    if (this.wordGenerator) {
+      try {
+        const generated = await this.wordGenerator.generate(cantidad, excluir);
+        if (this.isValidAdivinaBatch(generated, cantidad, excluir)) {
+          return generated;
+        }
+        this.logger.warn(
+          'La IA devolvió un lote de palabras de Adivina la palabra inválido; usando el banco de respaldo.',
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Falló la generación de palabras de Adivina la palabra por IA: ${(error as Error).message}`,
+        );
+      }
+    }
+    return this.pickAdivinaWordsFromFallback(cantidad, excluir);
+  }
+
+  private isValidAdivinaBatch(
+    palabras: AdivinaWord[],
+    cantidad: number,
+    excluir: string[],
+  ): boolean {
+    if (palabras.length !== cantidad) return false;
+    if (palabras.some((palabra) => !palabra.trim())) return false;
+    const normalizadas = palabras.map((palabra) => palabra.trim().toLowerCase());
+    if (new Set(normalizadas).size !== normalizadas.length) return false;
+    const yaUsadas = new Set(excluir.map((palabra) => palabra.trim().toLowerCase()));
+    return normalizadas.every((palabra) => !yaUsadas.has(palabra));
+  }
+
+  private pickAdivinaWordsFromFallback(cantidad: number, excluir: string[]): AdivinaWord[] {
+    const yaUsadas = new Set(excluir.map((palabra) => palabra.trim().toLowerCase()));
+    const disponibles = getFallbackAdivinaWords().filter(
+      (palabra) => !yaUsadas.has(palabra.trim().toLowerCase()),
+    );
+    return this.sample(disponibles, cantidad);
+  }
+
+  private async generateGestureWordsOrFallback(
+    cantidad: number,
+    excluir: string[],
+  ): Promise<GestureWord[]> {
+    if (this.gestureGenerator) {
+      try {
+        const generated = await this.gestureGenerator.generate(cantidad, excluir);
+        if (this.isValidGestureBatch(generated, cantidad, excluir)) {
+          return generated;
+        }
+        this.logger.warn(
+          'La IA devolvió un lote de palabras de Caras y Gestos inválido; usando el banco de respaldo.',
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Falló la generación de palabras de Caras y Gestos por IA: ${(error as Error).message}`,
+        );
+      }
+    }
+    return this.pickGestureWordsFromFallback(cantidad, excluir);
+  }
+
+  private isValidGestureBatch(
+    palabras: GestureWord[],
+    cantidad: number,
+    excluir: string[],
+  ): boolean {
+    if (palabras.length !== cantidad) return false;
+    if (palabras.some((palabra) => !palabra.trim())) return false;
+    const normalizadas = palabras.map((palabra) => palabra.trim().toLowerCase());
+    if (new Set(normalizadas).size !== normalizadas.length) return false;
+    const yaUsadas = new Set(excluir.map((palabra) => palabra.trim().toLowerCase()));
+    return normalizadas.every((palabra) => !yaUsadas.has(palabra));
+  }
+
+  private pickGestureWordsFromFallback(cantidad: number, excluir: string[]): GestureWord[] {
+    const yaUsadas = new Set(excluir.map((palabra) => palabra.trim().toLowerCase()));
+    const disponibles = getFallbackGestureWords().filter(
+      (palabra) => !yaUsadas.has(palabra.trim().toLowerCase()),
+    );
+    return this.sample(disponibles, cantidad);
   }
 
   private async generateOrFallback(

@@ -1,0 +1,161 @@
+.page {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 32px 20px;
+  background: linear-gradient(-45deg, #0891b2, #059669, #7c3aed, #0891b2);
+  background-size: 300% 300%;
+  animation: gradientShift 12s ease infinite;
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.message {
+  font-size: 18px;
+  font-weight: 600;
+  color: #fff;
+  text-align: center;
+  max-width: 320px;
+}
+
+.resultTitle {
+  font-size: 26px;
+  font-weight: 800;
+  color: #fff;
+  text-align: center;
+}
+
+.actionError {
+  padding: 10px 20px;
+  font-size: 14px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 10px;
+}
+
+.startButton {
+  padding: 24px 48px;
+  font-size: 28px;
+  font-weight: 800;
+  color: #059669;
+  background: #fff;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.actionButtons {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 320px;
+}
+
+.actionButton {
+  padding: 28px 20px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+}
+
+.guessedButton {
+  background: #16a34a;
+}
+
+.passButton {
+  background: #64748b;
+}
+
+.wordList {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 10px;
+  max-width: 340px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.wordList li {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-size: 14px;
+}
+
+.scoreList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 340px;
+}
+
+.scoreRow {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 18px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+}
+
+.scoreHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.myTeam {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.myTeam .teamName,
+.myTeam .teamScore {
+  color: #059669;
+}
+
+.myTeam .wordList li {
+  background: rgba(5, 150, 105, 0.12);
+  color: #065f46;
+}
+
+.swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.teamName {
+  flex: 1;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.teamScore {
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+}

@@ -150,6 +150,80 @@ describe("PlayLobby", () => {
     });
   });
 
+  it("con Caras y Gestos elegido, muestra su control en vez del equipo", async () => {
+    render(<PlayLobby roomCode="ABCDE" />);
+
+    fireEvent.change(screen.getByPlaceholderText("Tu nombre"), {
+      target: { value: "Ana" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /unirme/i }));
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(
+      makeRoom({
+        currentGame: "caras-y-gestos",
+        players: [{ id: "p1", name: "Ana", socketId: "socket-1" }],
+        teams: [
+          { id: "t1", name: "Rojos", color: "#ff0000", playerIds: ["p1"], score: 0 },
+        ],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/esperando a que arranque la partida/i)).toBeInTheDocument();
+      expect(screen.queryByText("Rojos")).not.toBeInTheDocument();
+    });
+  });
+
+  it("con Adivina la palabra elegido, muestra su control en vez del equipo", async () => {
+    render(<PlayLobby roomCode="ABCDE" />);
+
+    fireEvent.change(screen.getByPlaceholderText("Tu nombre"), {
+      target: { value: "Ana" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /unirme/i }));
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(
+      makeRoom({
+        currentGame: "adivina-palabra",
+        players: [{ id: "p1", name: "Ana", socketId: "socket-1" }],
+        teams: [
+          { id: "t1", name: "Rojos", color: "#ff0000", playerIds: ["p1"], score: 0 },
+        ],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/esperando a que arranque la partida/i)).toBeInTheDocument();
+      expect(screen.queryByText("Rojos")).not.toBeInTheDocument();
+    });
+  });
+
+  it("con La Rocola elegido, muestra sus instrucciones en vez del equipo (sin botón Listo mientras el host configura)", async () => {
+    render(<PlayLobby roomCode="ABCDE" />);
+
+    fireEvent.change(screen.getByPlaceholderText("Tu nombre"), {
+      target: { value: "Ana" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /unirme/i }));
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(
+      makeRoom({
+        currentGame: "la-rocola",
+        players: [{ id: "p1", name: "Ana", socketId: "socket-1" }],
+        teams: [
+          { id: "t1", name: "Rojos", color: "#ff0000", playerIds: ["p1"], score: 0 },
+        ],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("La Rocola")).toBeInTheDocument();
+      expect(screen.getByText(/esperando a que el anfitrión configure/i)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /listo/i })).not.toBeInTheDocument();
+      expect(screen.queryByText("Rojos")).not.toBeInTheDocument();
+    });
+  });
+
   it("muestra el mensaje de sala no encontrada al recibir error", async () => {
     render(<PlayLobby roomCode="ZZZZZ" />);
 

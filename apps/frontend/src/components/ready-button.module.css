@@ -1,0 +1,27 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.button {
+  padding: 24px 48px;
+  font-size: 28px;
+  font-weight: 800;
+  color: #7c3aed;
+  background: #fff;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.waiting {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.85);
+}

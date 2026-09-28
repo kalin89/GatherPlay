@@ -134,6 +134,17 @@ describe("useRoomState", () => {
     });
   });
 
+  it("startGestosGame emite start_gestos_game con el código de sala", () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    act(() => result.current.actions.startGestosGame());
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "start_gestos_game",
+      payload: { code: "ABCDE" },
+    });
+  });
+
   it("los eventos de trivia actualizan `trivia` vía el reducer compartido", async () => {
     const { result } = renderHook(() => useRoomState("ABCDE"));
 
@@ -199,6 +210,110 @@ describe("useRoomState", () => {
     });
   });
 
+  it("los eventos de Caras y Gestos actualizan `gestos` vía el reducer compartido, siempre en waiting_turn (nunca ready_to_start)", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    expect(result.current.gestos).toEqual({ phase: "idle" });
+
+    act(() =>
+      lastSocket?.trigger("gestos_turn_waiting", {
+        code: "ABCDE",
+        playerId: "p1",
+        playerName: "Ana",
+        teamId: "t1",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.gestos).toEqual({
+        phase: "waiting_turn",
+        playerId: "p1",
+        playerName: "Ana",
+        teamId: "t1",
+      });
+    });
+  });
+
+  it("un room_state con currentGame: null resetea `gestos` a idle", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    act(() =>
+      lastSocket?.trigger("gestos_turn_started", {
+        code: "ABCDE",
+        playerId: "p1",
+        playerName: "Ana",
+        palabra: "Elefante",
+        durationSeconds: 60,
+        palabrasRestantes: 5,
+      }),
+    );
+    await waitFor(() => expect(result.current.gestos.phase).toBe("acting"));
+
+    act(() => lastSocket?.triggerRoomState(makeRoom({ currentGame: null })));
+
+    await waitFor(() => {
+      expect(result.current.gestos).toEqual({ phase: "idle" });
+    });
+  });
+
+  it("startAdivinaPalabraGame emite start_adivina_palabra_game con el código de sala", () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    act(() => result.current.actions.startAdivinaPalabraGame());
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "start_adivina_palabra_game",
+      payload: { code: "ABCDE" },
+    });
+  });
+
+  it("los eventos de Adivina la palabra actualizan `adivinaPalabra` vía el reducer compartido", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    expect(result.current.adivinaPalabra).toEqual({ phase: "idle" });
+
+    act(() =>
+      lastSocket?.trigger("adivina_turn_waiting", {
+        code: "ABCDE",
+        playerId: "p1",
+        playerName: "Ana",
+        teamId: "t1",
+        marcador: [{ teamId: "t1", score: 0 }],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.adivinaPalabra).toEqual({
+        phase: "waiting_ready",
+        playerId: "p1",
+        playerName: "Ana",
+        teamId: "t1",
+        marcador: [{ teamId: "t1", score: 0 }],
+      });
+    });
+  });
+
+  it("un room_state con currentGame: null resetea `adivinaPalabra` a idle", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    act(() =>
+      lastSocket?.trigger("adivina_pantalla_estado", {
+        code: "ABCDE",
+        palabra: "Mesa",
+        remainingSeconds: 30,
+        pasesRestantes: 3,
+        ultimaAccion: null,
+      }),
+    );
+    await waitFor(() => expect(result.current.adivinaPalabra.phase).toBe("active_screen"));
+
+    act(() => lastSocket?.triggerRoomState(makeRoom({ currentGame: null })));
+
+    await waitFor(() => {
+      expect(result.current.adivinaPalabra).toEqual({ phase: "idle" });
+    });
+  });
+
   it("un error antes del primer room_state es fatal (error)", async () => {
     const { result } = renderHook(() => useRoomState("ABCDE"));
 
@@ -208,6 +323,87 @@ describe("useRoomState", () => {
     await waitFor(() => {
       expect(result.current.error?.message).toBe("La sala no existe");
       expect(result.current.actionError).toBeNull();
+    });
+  });
+
+  it("startLaRocolaGame emite start_la_rocola_game con el código de sala", () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    act(() => result.current.actions.startLaRocolaGame());
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "start_la_rocola_game",
+      payload: { code: "ABCDE" },
+    });
+  });
+
+  it("los eventos de La Rocola actualizan `laRocola` vía el reducer compartido", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    expect(result.current.laRocola).toEqual({ phase: "idle" });
+
+    act(() =>
+      lastSocket?.trigger("rocola_ready_state", {
+        code: "ABCDE",
+        readyPlayerIds: ["p1"],
+        eligiblePlayerIds: ["p1", "p2"],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.laRocola).toEqual({
+        phase: "waiting_ready",
+        readyPlayerIds: ["p1"],
+        eligiblePlayerIds: ["p1", "p2"],
+      });
+    });
+  });
+
+  it("un room_state con currentGame: null resetea `laRocola` a idle", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    act(() =>
+      lastSocket?.trigger("rocola_ready_state", {
+        code: "ABCDE",
+        readyPlayerIds: [],
+        eligiblePlayerIds: ["p1"],
+      }),
+    );
+    await waitFor(() => expect(result.current.laRocola.phase).toBe("waiting_ready"));
+
+    act(() => lastSocket?.triggerRoomState(makeRoom({ currentGame: null })));
+
+    await waitFor(() => {
+      expect(result.current.laRocola).toEqual({ phase: "idle" });
+    });
+  });
+
+  it("rocola_audio_control expone `laRocolaAudio` con un nonce nuevo por evento", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    expect(result.current.laRocolaAudio).toBeNull();
+
+    act(() =>
+      lastSocket?.trigger("rocola_audio_control", {
+        code: "ABCDE",
+        action: "play",
+        previewUrl: "https://preview",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.laRocolaAudio).toMatchObject({
+        action: "play",
+        previewUrl: "https://preview",
+      });
+    });
+    const firstNonce = result.current.laRocolaAudio!.nonce;
+
+    act(() => lastSocket?.trigger("rocola_audio_control", { code: "ABCDE", action: "pause" }));
+
+    await waitFor(() => {
+      expect(result.current.laRocolaAudio).toMatchObject({ action: "pause" });
+      expect(result.current.laRocolaAudio!.nonce).not.toBe(firstNonce);
     });
   });
 
