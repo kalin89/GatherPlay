@@ -7,7 +7,7 @@ arrancar cualquier temporizador — nunca durante uno (`constitution.md`, princi
 **100% backend, sin ningún endpoint ni evento WS nuevo.** `MemorizaObjetosService` va a
 consumir `MemorizaObjetosContentService` directamente como provider de Nest, mismo
 criterio que `LaRocolaService` con `RocolaContentService.selectSongs` (ver
-`specs/features/rocola-content/analysis.md`, feat/la-rocola). Por la excepción de
+`specs/features/rocola-content/analysis.md`). Por la excepción de
 `testing-strategy.md` ("puro backend, sin UI conectada todavía"), no tiene checklist
 manual.
 

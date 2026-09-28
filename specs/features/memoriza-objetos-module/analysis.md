@@ -7,9 +7,8 @@ Tarea de Fase 3 (ver `tasks.md`). Depende de
 **También depende de `specs/features/la-rocola-module/analysis.md`** (utilidad
 `game-engine/ready-gate.ts` → clase `ReadyGate`, convención de "instrucciones +
 Listo") **y de `specs/features/la-rocola-ui/analysis.md`** (componentes genéricos de
-pantalla — ver `memoriza-objetos-ui/analysis.md`) — ambos viven hoy en la rama
-`feat/la-rocola`, todavía no mergeada a `main`. Esta tarea no arranca hasta que esa
-rama esté en `main`, porque reusa esas piezas tal cual en vez de reinventarlas (mismo
+pantalla — ver `memoriza-objetos-ui/analysis.md`) — ya mergeadas a `main` (PR de "La
+Rocola"), así que esta tarea reusa esas piezas tal cual en vez de reinventarlas (mismo
 criterio que pide `feedback-game-screen-convention` en la memoria del proyecto).
 
 No usa `distributeTurns` (`game-engine/turn-distribution.ts`) — ese helper arma un

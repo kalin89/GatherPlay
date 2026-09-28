@@ -253,6 +253,27 @@ español ya existente — nunca se relaja esa regla, con o sin filtro.
   falta completar desde el banco de respaldo, **then** las canciones de respaldo
   también respetan el filtro elegido.
 
+## Contenido — Memoriza los objetos
+
+`MemorizaObjetosContentService.selectObjects(cantidad, excluir)` arma el tablero de la
+partida (ver "Minijuegos" → "10. Memoriza los objetos en la imagen") antes de que
+arranque cualquier temporizador, nunca en caliente (`constitution.md`, principio 5).
+Mismo criterio que `RocolaContentService.selectSongs`: es un banco curado a mano
+(objetos cotidianos, en español, con su imagen ya resuelta), no generación por modelo
+de lenguaje ni de imágenes — por eso vive en su propio módulo de contenido,
+`MemorizaObjetosContentModule`, no dentro de `AiContentModule`.
+
+- **Given** una cantidad válida y una lista de objetos a excluir, **when** se piden
+  objetos, **then** se devuelven `cantidad` objetos distintos entre sí, ninguno
+  coincide con la lista de exclusión, y cada uno trae su palabra y la URL de su imagen.
+- **Given** una cantidad inválida (menor a 1 o no entera), **when** se piden objetos,
+  **then** se recibe un error, sin tocar el banco.
+- **Given** el banco no tiene suficientes objetos nuevos para cubrir la exclusión
+  pedida, **when** se piden objetos, **then** se completa reutilizando objetos ya
+  usados en esa sala en vez de arrancar la partida con menos objetos de los que hacen
+  falta (caso límite aceptado: una sesión familiar real no agota un banco de ~150
+  objetos).
+
 ## Minijuegos
 
 ### 1. Mímica / Caras y Gestos
@@ -495,27 +516,6 @@ deja anotado como posible evolución del juego, no se diseña ni se implementa a
   **when** se vuelve a elegir este juego en la misma sala, **then** no se repiten
   objetos ya usados en partidas anteriores de esa sala, salvo que se agote el banco
   disponible (caso límite aceptado, ver "Contenido — Memoriza los objetos").
-
-## Contenido — Memoriza los objetos
-
-`MemorizaObjetosContentService.selectObjects(cantidad, excluir)` arma el tablero de la
-partida (ver "Minijuegos" → "10. Memoriza los objetos en la imagen") antes de que
-arranque cualquier temporizador, nunca en caliente (`constitution.md`, principio 5).
-Mismo criterio que `RocolaContentService.selectSongs`: es un banco curado a mano
-(objetos cotidianos, en español, con su imagen ya resuelta), no generación por modelo
-de lenguaje ni de imágenes — por eso vive en su propio módulo de contenido,
-`MemorizaObjetosContentModule`, no dentro de `AiContentModule`.
-
-- **Given** una cantidad válida y una lista de objetos a excluir, **when** se piden
-  objetos, **then** se devuelven `cantidad` objetos distintos entre sí, ninguno
-  coincide con la lista de exclusión, y cada uno trae su palabra y la URL de su imagen.
-- **Given** una cantidad inválida (menor a 1 o no entera), **when** se piden objetos,
-  **then** se recibe un error, sin tocar el banco.
-- **Given** el banco no tiene suficientes objetos nuevos para cubrir la exclusión
-  pedida, **when** se piden objetos, **then** se completa reutilizando objetos ya
-  usados en esa sala en vez de arrancar la partida con menos objetos de los que hacen
-  falta (caso límite aceptado: una sesión familiar real no agota un banco de ~150
-  objetos).
 
 ### 11. Adivina la palabra
 

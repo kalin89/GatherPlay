@@ -6,8 +6,8 @@ Tarea de Fase 3 (ver `tasks.md`). Depende de
 juego se monta según `RoomState.currentGame`). También depende de
 `specs/features/la-rocola-ui/analysis.md` — reusa tal cual los 4 componentes
 genéricos de convención que esa tarea construyó (`GameInstructions`, `ReadyButton`,
-`MatchScoreboard`, `MatchWinnerBanner`), sin volver a diseñarlos. Misma rama sin
-mergear (`feat/la-rocola`) de la que depende `memoriza-objetos-module`.
+`MatchScoreboard`, `MatchWinnerBanner`), sin volver a diseñarlos. Ya mergeados a
+`main` (PR de "La Rocola").
 
 No incluye pruebas e2e de Playwright — mismo criterio que `adivina-palabra-ui/analysis.md`:
 el camino feliz con sockets reales ya lo cubre `memoriza-objetos-module/analysis.md`.
