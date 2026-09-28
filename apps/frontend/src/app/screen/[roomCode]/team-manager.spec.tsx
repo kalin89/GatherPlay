@@ -26,6 +26,8 @@ function makeActions(overrides: Partial<RoomActions> = {}): RoomActions {
     startTriviaGame: vi.fn(),
     startGestosGame: vi.fn(),
     startAdivinaPalabraGame: vi.fn(),
+    startLaRocolaGame: vi.fn(),
+    getRocolaArtists: vi.fn(),
     ...overrides,
   };
 }

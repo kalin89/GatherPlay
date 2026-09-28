@@ -477,4 +477,87 @@ describe("useJoinRoom", () => {
       expect(result.current.adivinaPalabra).toEqual({ phase: "idle" });
     });
   });
+
+  it("markRocolaReady emite rocola_ready con el código en mayúsculas", () => {
+    const { result } = renderHook(() => useJoinRoom("abcde"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() => result.current.markRocolaReady());
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "rocola_ready",
+      payload: { code: "ABCDE" },
+    });
+  });
+
+  it("rocolaBuzz emite rocola_buzz con el código en mayúsculas", () => {
+    const { result } = renderHook(() => useJoinRoom("abcde"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() => result.current.rocolaBuzz());
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "rocola_buzz",
+      payload: { code: "ABCDE" },
+    });
+  });
+
+  it("submitRocolaAnswer emite rocola_submit_answer con el código en mayúsculas y el texto", () => {
+    const { result } = renderHook(() => useJoinRoom("abcde"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() => result.current.submitRocolaAnswer("Rayando el Sol"));
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "rocola_submit_answer",
+      payload: { code: "ABCDE", texto: "Rayando el Sol" },
+    });
+  });
+
+  it("los eventos de La Rocola actualizan `laRocola` vía el reducer compartido", async () => {
+    const { result } = renderHook(() => useJoinRoom("ABCDE"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+
+    act(() =>
+      lastSocket?.trigger("rocola_ready_state", {
+        code: "ABCDE",
+        readyPlayerIds: [],
+        eligiblePlayerIds: ["p1", "p2"],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.laRocola).toEqual({
+        phase: "waiting_ready",
+        readyPlayerIds: [],
+        eligiblePlayerIds: ["p1", "p2"],
+      });
+    });
+  });
+
+  it("un room_state con currentGame: null resetea `laRocola` a idle", async () => {
+    const { result } = renderHook(() => useJoinRoom("ABCDE"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() =>
+      lastSocket?.trigger("rocola_ready_state", {
+        code: "ABCDE",
+        readyPlayerIds: [],
+        eligiblePlayerIds: ["p1"],
+      }),
+    );
+    await waitFor(() => expect(result.current.laRocola.phase).toBe("waiting_ready"));
+
+    act(() => lastSocket?.triggerRoomState(makeRoom({ currentGame: null })));
+
+    await waitFor(() => {
+      expect(result.current.laRocola).toEqual({ phase: "idle" });
+    });
+  });
 });

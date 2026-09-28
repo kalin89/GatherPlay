@@ -228,6 +228,31 @@ obtener el preview de audio y la portada de cada canción.
   bloquear la partida — caso límite aceptado, una sesión familiar real no agota un
   banco de ~150-200 canciones en una sola reunión.
 
+### Filtro opcional por género o artista (elegido por el host)
+
+Antes de arrancar la partida, el host puede angostar de qué canciones se juega —
+**por género o por artista, nunca ambos a la vez** — o dejarlo sin filtro (igual que
+hoy, aleatorio entre todo el banco). El filtro se aplica **dentro** del banco en
+español ya existente — nunca se relaja esa regla, con o sin filtro.
+
+- **Given** el host no elige ningún filtro, **when** arranca la partida, **then** el
+  comportamiento es el mismo que hoy: 10 canciones al azar de todo el banco, con el
+  tope de variedad de 2 por género.
+- **Given** el host elige un género, **when** se piden las canciones, **then** las 10
+  son de ese género exclusivamente — el tope de "máximo 2 por género" no aplica en este
+  caso (no tendría sentido: pediría contradecir el propio filtro).
+- **Given** el host elige un artista (de una lista con los artistas que existen en el
+  banco, no texto libre), **when** se piden las canciones, **then** las 10 son de ese
+  artista exclusivamente, sin tope de variedad por género.
+- **Given** el género o artista elegido no tiene al menos 10 canciones distintas en el
+  banco, **when** el host intenta arrancar la partida, **then** no arranca — se le
+  informa cuántas canciones hay disponibles para ese filtro y puede elegir otro filtro
+  o dejarlo sin filtro. Esta validación ocurre apenas se intenta arrancar, antes de
+  pedirle a nadie que presione "Listo".
+- **Given** un filtro activo, **when** el servicio de previews en vivo falla y hace
+  falta completar desde el banco de respaldo, **then** las canciones de respaldo
+  también respetan el filtro elegido.
+
 ## Minijuegos
 
 ### 1. Mímica / Caras y Gestos
@@ -287,18 +312,25 @@ Un jugador recibe un personaje/celebridad asignado (solo visible para los demás
 
 Dos equipos o más (de 1 o más integrantes cada uno) compiten por adivinar la canción
 que suena, con buzzer libre: cualquier jugador de cualquier equipo puede presionar
-"¡Me la sé!" en cuanto arranca la canción. El juego no es el juez — el jugador que
-gana el buzzer dice la respuesta en voz alta y el resto del grupo decide si es
-correcta; ese mismo jugador confirma el resultado desde su celular. Se juegan 10
-canciones por partida, en español y variadas (cumbia, merengue, salsa, baladas,
-rancheras, pop, rock, popular — desde clásicos hasta actuales, para que participe
-toda la familia).
+"¡Me la sé!" en cuanto arranca la canción, y tiene 30 segundos para escribir el
+nombre de la canción en su celular. La respuesta se juzga automáticamente por
+similitud de texto (tolera errores de tipeo, tildes faltantes y alguna palabra de
+más/menos — nunca por IA, para no depender de una llamada en caliente durante la
+ronda), no por el grupo. Se juegan 10 canciones por partida, en español y variadas
+(cumbia, merengue, salsa, baladas, rancheras, pop, rock, popular — desde clásicos
+hasta actuales, para que participe toda la familia).
 
-- **Given** la partida recién elegida desde el panel de selección de juego (tras la
-  convención de instrucciones + "Listo" de todos), **when** arranca la primera ronda,
-  **then** la pantalla muestra un conteo descendente de 5 segundos, con un sonido de
-  reloj en cada segundo que pasa (reutilizando uno existente si ya hay un sonido de
-  cuenta regresiva).
+- **Given** el juego recién elegido desde el panel de selección, **when** la pantalla lo
+  muestra, **then** el host puede elegir de qué se juega antes de que arranque nada:
+  sin filtro (aleatorio, como siempre), por género, o por artista — ver "Contenido —
+  La Rocola" → "Filtro opcional por género o artista". Esta elección es anterior a la
+  convención de instrucciones + "Listo" de todos: los celulares de los jugadores no
+  participan de esta pantalla, solo esperan.
+- **Given** el filtro elegido (o ninguno) y la partida arrancada, **when** eso ocurre,
+  **then** sigue la convención de instrucciones + "Listo" de todos, y luego **when**
+  arranca la primera ronda, **then** la pantalla muestra un conteo descendente de 5
+  segundos, con un sonido de reloj en cada segundo que pasa (reutilizando uno existente
+  si ya hay un sonido de cuenta regresiva).
 - **Given** el conteo llega a cero, **when** eso ocurre, **then** la pantalla muestra
   un texto grande con un ícono o emoji de música y el texto "Adivina la canción", y en
   ese mismo instante empieza a sonar la canción de la ronda (reproducida desde el
@@ -309,27 +341,32 @@ toda la familia).
   deshabilitado hasta el instante en que arranca la canción.
 - **Given** el botón habilitado y la canción sonando, **when** un jugador lo presiona,
   **then** el botón de todos los demás jugadores queda deshabilitado de inmediato, la
-  canción se pausa, y a ese jugador le aparecen dos botones nuevos: uno verde con un
-  ícono de check y otro rojo con un ícono de "x".
-- **Given** el jugador que presionó primero, **when** dice en voz alta su respuesta y
-  el resto del grupo decide si es válida, **then** ese mismo jugador presiona el botón
-  verde (correcto) o el rojo (incorrecto) reflejando lo que el grupo decidió — la
-  lógica del juego nunca valida el contenido de la respuesta.
-- **Given** el jugador presiona el botón verde (correcto), **when** eso ocurre,
-  **then** se otorga 1 punto a su equipo y la ronda termina.
-- **Given** el jugador presiona el botón rojo (incorrecto), **when** eso ocurre,
-  **then** sus botones verde/rojo desaparecen de su celular y la pantalla muestra
-  "Robo de punto del equipo {nombre del equipo contrario}" (o, con más de dos equipos,
-  los nombres de todos los equipos distintos al que falló) mientras la canción se
-  reanuda desde donde se pausó.
+  canción se pausa, y a ese jugador le aparece un campo de texto con 30 segundos para
+  escribir el nombre de la canción.
+- **Given** el campo de texto visible, **when** el jugador escribe su respuesta y la
+  envía (o se acaban los 30 segundos, lo que pase primero), **then** el texto se
+  compara contra el título real de la canción tolerando errores de tipeo, tildes
+  faltantes y alguna palabra de más o de menos — sin exigir coincidencia exacta, pero
+  sin aceptar una respuesta sin relación real con el título.
+- **Given** el jugador no llega a enviar la respuesta antes de que se acaben los 30
+  segundos, **when** eso ocurre, **then** se juzga lo que haya escrito hasta ese
+  momento (aunque esté incompleto), igual que si lo hubiera enviado.
+- **Given** la respuesta escrita coincide (según el criterio de tolerancia) con el
+  título, **when** eso ocurre, **then** se otorga 1 punto a su equipo y la ronda
+  termina.
+- **Given** la respuesta escrita no coincide con el título, **when** eso ocurre,
+  **then** el campo de texto desaparece de ese celular y la pantalla muestra "Robo de
+  punto del equipo {nombre del equipo contrario}" (o, con más de dos equipos, los
+  nombres de todos los equipos distintos al que falló) mientras la canción se reanuda
+  desde donde se pausó.
 - **Given** la fase de robo de punto, **when** dura hasta 5 segundos, **then** el botón
   "¡Me la sé!" vuelve a habilitarse, mostrado solo a los jugadores de los equipos con
   chance de robar.
 - **Given** alguien presiona el botón durante el robo antes de que termine el tiempo,
-  **when** eso ocurre, **then** se repite la misma dinámica de buzzer único → canción
-  se pausa → botones verde/rojo solo para ese jugador → él confirma con el grupo.
-- **Given** el robo también termina en incorrecto (botón rojo), **when** eso ocurre,
-  **then** la ronda termina sin puntos para nadie y se pasa a la revelación.
+  **when** eso ocurre, **then** se repite la misma dinámica: canción se pausa, campo de
+  texto con 30 segundos solo para ese jugador, juicio automático de la respuesta.
+- **Given** el robo también termina en una respuesta que no coincide, **when** eso
+  ocurre, **then** la ronda termina sin puntos para nadie y se pasa a la revelación.
 - **Given** nadie presiona el botón durante toda la canción, o nadie presiona durante
   los 5 segundos de robo, **when** eso ocurre, **then** la ronda termina sin puntos
   para nadie y se pasa a la revelación (mismo resultado que un robo fallido).

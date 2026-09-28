@@ -326,6 +326,87 @@ describe("useRoomState", () => {
     });
   });
 
+  it("startLaRocolaGame emite start_la_rocola_game con el código de sala", () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    act(() => result.current.actions.startLaRocolaGame());
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "start_la_rocola_game",
+      payload: { code: "ABCDE" },
+    });
+  });
+
+  it("los eventos de La Rocola actualizan `laRocola` vía el reducer compartido", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    expect(result.current.laRocola).toEqual({ phase: "idle" });
+
+    act(() =>
+      lastSocket?.trigger("rocola_ready_state", {
+        code: "ABCDE",
+        readyPlayerIds: ["p1"],
+        eligiblePlayerIds: ["p1", "p2"],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.laRocola).toEqual({
+        phase: "waiting_ready",
+        readyPlayerIds: ["p1"],
+        eligiblePlayerIds: ["p1", "p2"],
+      });
+    });
+  });
+
+  it("un room_state con currentGame: null resetea `laRocola` a idle", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    act(() =>
+      lastSocket?.trigger("rocola_ready_state", {
+        code: "ABCDE",
+        readyPlayerIds: [],
+        eligiblePlayerIds: ["p1"],
+      }),
+    );
+    await waitFor(() => expect(result.current.laRocola.phase).toBe("waiting_ready"));
+
+    act(() => lastSocket?.triggerRoomState(makeRoom({ currentGame: null })));
+
+    await waitFor(() => {
+      expect(result.current.laRocola).toEqual({ phase: "idle" });
+    });
+  });
+
+  it("rocola_audio_control expone `laRocolaAudio` con un nonce nuevo por evento", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    expect(result.current.laRocolaAudio).toBeNull();
+
+    act(() =>
+      lastSocket?.trigger("rocola_audio_control", {
+        code: "ABCDE",
+        action: "play",
+        previewUrl: "https://preview",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.laRocolaAudio).toMatchObject({
+        action: "play",
+        previewUrl: "https://preview",
+      });
+    });
+    const firstNonce = result.current.laRocolaAudio!.nonce;
+
+    act(() => lastSocket?.trigger("rocola_audio_control", { code: "ABCDE", action: "pause" }));
+
+    await waitFor(() => {
+      expect(result.current.laRocolaAudio).toMatchObject({ action: "pause" });
+      expect(result.current.laRocolaAudio!.nonce).not.toBe(firstNonce);
+    });
+  });
+
   it("un error después de tener state cargado va a actionError, no a error", async () => {
     const { result } = renderHook(() => useRoomState("ABCDE"));
 

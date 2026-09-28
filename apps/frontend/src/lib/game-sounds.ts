@@ -61,6 +61,15 @@ export function playPassSound(): void {
   playTone(context, 350, context.currentTime, 0.15, "sine");
 }
 
+// Tic corto y seco, pensado para repetirse una vez por segundo durante un
+// conteo regresivo (La Rocola) sin cansar el oído — distinto de los otros
+// tres, que marcan un resultado, no el paso del tiempo.
+export function playTickSound(): void {
+  const context = getAudioContext();
+  if (!context) return;
+  playTone(context, 880, context.currentTime, 0.06, "square");
+}
+
 // Jingle corto (4 notas ascendentes, C5 → E5 → G5 → C6), más largo que los
 // otros dos — para el equipo ganador al terminar la partida.
 export function playVictorySound(): void {

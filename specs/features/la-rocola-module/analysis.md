@@ -95,12 +95,85 @@ juego".
   contrario" en singular) cuando hay más de 2 equipos — el texto de pantalla lista los
   nombres de todos los equipos con chance.
 - **Sin buzz de nadie** (ni en la canción ni en el robo) termina la ronda sin puntos,
-  igual que un robo fallido — no hay reintento adicional.
-- **Solo el jugador que ganó el buzzer puede confirmar** correcto/incorrecto — si se
-  desconecta antes de confirmar, la ronda queda bloqueada (mismo límite ya documentado
-  para "recargar a mitad de turno" en otros juegos, ver Fase 4 "Manejo de reconexión").
+  igual que una respuesta incorrecta — no hay reintento adicional.
 - **Sin repetir canciones por sala** mientras la sala exista, con el caso límite de
   `rocola-content/analysis.md` (reinicio de exclusión si el banco se agota).
+
+### Cambio de regla (iteración 2, confirmado con Kalin): respuesta escrita, no juicio grupal
+
+La primera iteración de este juego dejaba que el grupo decidiera oralmente si la
+respuesta del jugador que ganó el buzzer era correcta, confirmando con dos botones
+✓/✗. Kalin pidió reemplazar esto: **el jugador escribe la respuesta en un campo de
+texto** (30 segundos) y el sistema la juzga automáticamente, porque depender de que
+"el público sea juez" fallaba cuando nadie en la sala sabía la respuesta con certeza.
+
+- **Comparación por similitud de texto, no por IA**: se evaluó explícitamente usar IA
+  para el juicio (tolerar mejor los typos), pero eso pondría una llamada de IA en el
+  camino crítico de cada ronda — viola directamente constitution.md principio 5 ("la
+  lógica de turnos y tiempos nunca depende de una llamada a un modelo de IA en
+  caliente"). Kalin eligió la opción sin IA: un comparador de texto tolerante
+  (`answer-matcher.ts`) resuelve todos los casos sin red y sin latencia variable. Ver
+  sección "Juicio de la respuesta escrita" más abajo.
+- **30 segundos para escribir**, iguales para la ronda normal y para el robo de punto
+  (antes el robo no tenía juicio propio, ahora sí, con su propio temporizador de
+  respuesta corriendo dentro de los mismos 5 segundos de ventana del robo — ver
+  diseño).
+- **Si no se envía antes de que se acaben los 30s, se juzga lo que haya escrito hasta
+  ese momento** (no una respuesta vacía por defecto) — el cliente auto-envía el valor
+  actual del campo apenas su propio conteo llega a 0; el backend igual tiene un
+  temporizador de respaldo que resuelve con cadena vacía si ninguna respuesta llega
+  (ej. el jugador se desconectó), para que la ronda nunca quede colgada.
+- **Ya no hay confirmación manual ✓/✗** — se eliminan `handleMarkCorrect`/
+  `handleMarkIncorrect` y los errores `NoDecisionPendingError`/`NotYourDecisionError`,
+  reemplazados por `handleSubmitAnswer`/`NotYourAnswerError`.
+
+## Juicio de la respuesta escrita — `answer-matcher.ts`
+
+`isFuzzyMatch(guess: string, titulo: string): boolean`, función pura sin dependencias,
+en `apps/backend/src/la-rocola/answer-matcher.ts`:
+
+1. Normaliza ambos textos: minúsculas, quita el subtítulo entre paréntesis del título
+   (ej. "Waka Waka (Esto Es África)" → compara solo contra "Waka Waka Esto Es Africa"
+   sin que un subtítulo largo penalice de más), quita tildes/diacríticos, quita
+   puntuación, separa en palabras y descarta stopwords en español (el, la, los, las,
+   de, del, y, a, un, una, en, al, es).
+2. Para cada palabra clave del título, busca una palabra en la respuesta que matchee
+   por distancia de Levenshtein tolerando errores de tipeo (tolerancia proporcional al
+   largo de la palabra — 1 carácter para palabras de hasta 4 letras, ~30% del largo
+   para palabras más largas).
+3. Títulos de 3 o más palabras clave toleran que **una** no tenga correspondencia en la
+   respuesta (permite "copa de la vida" para "La Copa de la Vida"); títulos de 1-2
+   palabras clave exigen que todas matcheen.
+4. Sin ninguna palabra en común, o con más ausencias que las toleradas → `false`.
+
+Ejemplos confirmados con Kalin (y cubiertos en `answer-matcher.spec.ts`): "Rallando el
+sol", "rayando sol", "rayndo el sol" → `true` contra "Rayando el Sol"; una respuesta sin
+relación real (ej. "despacito") → `false`.
+
+## Cambio de regla (iteración 3, confirmado con Kalin): filtro por género o artista
+
+El host puede angostar de qué canciones se juega antes de arrancar la partida — ver
+spec.md → "Filtro opcional por género o artista". Decisiones tomadas con Kalin:
+
+- **Género o artista, nunca ambos** — `RocolaFiltro` (definido en
+  `rocola-content.types.ts`, ver `rocola-content/analysis.md`) es una unión
+  discriminada de un solo caso a la vez.
+- **Artista: lista desplegable, no texto libre** — el host elige de
+  `RocolaContentService.getAvailableArtists()`, nunca escribe el nombre a mano. Cero
+  riesgo de "no se encontró ese artista" por un tipeo.
+- **Sin filtro = comportamiento actual** (aleatorio, tope de 2 por género) — el filtro
+  es 100% opcional, default "ninguno".
+- **Validar antes de arrancar, no completar con aleatorio.** Si el filtro no llega a 10
+  canciones, no se arranca la partida — se le avisa al host cuántas hay disponibles
+  para que elija otro filtro o lo deje sin filtro. Se descartó la alternativa de
+  completar las que falten con canciones al azar de otro género/artista: mezclar
+  silenciosamente rompería la expectativa de "estas 10 son de tal artista" sin que
+  nadie lo pida.
+- **La validación se hace apenas el host aprieta "Empezar", antes del `ReadyGate`** —
+  no tendría sentido hacer esperar a todos los jugadores a que presionen "Listo" para
+  recién ahí descubrir que el filtro no alcanza. Como `countAvailable` es síncrono y
+  sin red (cuenta sobre `song-bank.ts` en memoria), esto no implica ningún costo ni
+  retraso — se resuelve en el mismo `startMatch`, antes de crear el `ReadyGate`.
 
 ## Diseño
 
@@ -122,6 +195,7 @@ export interface RocolaRoundResult {
   playerId: string | null;
   playerName: string | null;
   puntos: 0 | 1;
+  respuesta: string; // lo que el jugador escribió ('' si no llegó a escribir nada)
 }
 
 export type LaRocolaEvent =
@@ -155,6 +229,7 @@ export type LaRocolaEvent =
       playerName: string;
       teamId: string;
     }
+  | { type: 'rocola_answer_tick'; code: string; remainingSeconds: number }
   | {
       type: 'rocola_robo_started';
       code: string;
@@ -170,6 +245,10 @@ export type LaRocolaEvent =
       canciones: { titulo: string; artista: string; teamId: string | null }[];
     };
 ```
+
+(`rocola_artists`, la respuesta a `rocola_get_artists`, **no** es parte de
+`LaRocolaEvent` — se contesta directo al socket que preguntó desde el propio gateway,
+sin pasar por `events$`; ver "`la-rocola.gateway.ts`" más abajo.)
 
 `rocola_audio_control` es el único evento con `targetSocketIds` (siempre
 `[screenRoomName(code)]`) — la canción suena solo por el dispositivo del host, nunca
@@ -203,6 +282,7 @@ type RocolaPhase =
 
 interface RocolaMatchState {
   readyGate: ReadyGate;
+  filtro: RocolaFiltro | null; // elegido por el host al arrancar, fijo por partida
   songs: RocolaSong[]; // 10, ya resueltas — se llenan recién al satisfacer el ReadyGate
   currentIndex: number;
   phase: RocolaPhase;
@@ -217,25 +297,36 @@ interface RocolaMatchState {
 ```
 
 Constantes: `TOTAL_ROUNDS = 10`, `COUNTDOWN_SECONDS = 5`, `SONG_SECONDS = 30`,
-`ROBO_SECONDS = 5`, `REVEAL_DISPLAY_MS = 4_000`, `RESULTS_DISPLAY_MS = 10_000` (mismo
-valor que Trivia/Adivina la palabra).
+`ANSWER_SECONDS = 30` (tiempo para escribir la respuesta, igual en ronda normal y en
+robo), `ROBO_SECONDS = 5`, `REVEAL_DISPLAY_MS = 4_000`, `RESULTS_DISPLAY_MS = 10_000`
+(mismo valor que Trivia/Adivina la palabra).
 
-- **`startMatch(code)`**:
+- **`startMatch(code, filtro?: RocolaFiltro)`**:
   1. Si ya hay partida en curso → `RocolaMatchAlreadyRunningError`.
   2. `room = rooms.getRoomOrThrow(code)`.
   3. `participating = room.teams.filter(t => t.playerIds.length > 0)`; si
      `participating.length < 2` → `NotEnoughTeamsError` (reusada de
      `game-engine/turn-distribution.ts`, mismo criterio que Adivina la palabra la deja
      burbujear).
-  4. `eligiblePlayerIds` = ids de jugadores que pertenecen a algún equipo participante.
-  5. `room.status = 'jugando'`. Inicializa el estado de partida con
-     `readyGate: new ReadyGate(eligiblePlayerIds)`, `songs: []`, `currentIndex: 0`,
-     `phase: 'waiting_ready'`, resto en `null`/vacío, `matchScores` en 0 por equipo.
-  6. Emite `room_state` y `rocola_ready_state` (`readyPlayerIds: []`,
+  4. Si `filtro` está presente: `disponibles = this.content.countAvailable(filtro)`; si
+     `disponibles < TOTAL_ROUNDS` → `InsufficientFilteredSongsError(filtro,
+     disponibles)` — no se crea partida ni se toca `room.status` (el host puede
+     reintentar con otro filtro sin que nada haya cambiado).
+  5. `eligiblePlayerIds` = ids de jugadores que pertenecen a algún equipo participante.
+  6. `room.status = 'jugando'`. Inicializa el estado de partida con
+     `readyGate: new ReadyGate(eligiblePlayerIds)`, `filtro: filtro ?? null`,
+     `songs: []`, `currentIndex: 0`, `phase: 'waiting_ready'`, resto en `null`/vacío,
+     `matchScores` en 0 por equipo.
+  7. Emite `room_state` y `rocola_ready_state` (`readyPlayerIds: []`,
      `eligiblePlayerIds`).
   - **No** pide las canciones todavía — se piden recién al satisfacer el `ReadyGate`
     (ver siguiente método), para no acoplar la espera humana con la llamada al
-    proveedor de contenido.
+    proveedor de contenido. La validación de "alcanza" (paso 4) sí es inmediata porque
+    es síncrona y sin red — no hay motivo para retrasarla hasta el `ReadyGate`.
+- **`getAvailableArtists(code)`**: delega directo en
+  `this.content.getAvailableArtists()` — no depende de nada de la sala, `code` está
+  solo por simetría con el resto de los métodos del gateway. Usado por el evento
+  `rocola_get_artists` (ver gateway).
 - **`markReady(code, socketId)`**:
   - Valida partida activa (`NoRocolaMatchError`), `phase === 'waiting_ready'` (si no,
     `TurnAlreadyStartedError` reusando el nombre de error ya establecido en Adivina la
@@ -245,7 +336,8 @@ valor que Trivia/Adivina la palabra).
   - Emite `rocola_ready_state` actualizado.
   - Si `match.readyGate.isSatisfied` → `await this.beginContent(code)` (privado, async):
     1. `used = this.roomUsedSongs.get(code) ?? new Set()`.
-    2. `songs = await this.content.selectSongs(TOTAL_ROUNDS, [...used])`.
+    2. `songs = await this.content.selectSongs(TOTAL_ROUNDS, [...used], match.filtro ??
+       undefined)`.
     3. `songs.forEach(s => used.add(s.id))`; `this.roomUsedSongs.set(code, used)` —
        se reservan como "usadas" apenas se eligen (no hay concepto de "devolver al
        pool" como en Adivina la palabra: acá siempre se juegan las 10 completas en una
@@ -286,32 +378,40 @@ valor que Trivia/Adivina la palabra).
   - `phase = phase === 'robo' ? 'robo_respondiendo' : 'respondiendo'`.
   - Emite `rocola_audio_control` (`action: 'pause'`) y `rocola_buzzer_locked`
     (`playerId`, `playerName`, `teamId`) a toda la sala — cada cliente decide con esto
-    si mostrar "esperando a que {nombre} responda" (los demás) o los botones ✓/✗ (el
-    propio jugador, comparando `playerId` con el suyo, mismo criterio que
-    `adivina_turn_waiting` en Adivina la palabra).
-- **`handleMarkCorrect(code, socketId)`** (botón verde):
-  - Valida partida activa, `phase` es `'respondiendo'` o `'robo_respondiendo'` (si no,
-    `NoDecisionPendingError`), `socketId` corresponde a `match.buzzedPlayerId` (si no,
-    `NotYourDecisionError`).
-  - `gameEngine.addScore(code, match.buzzedTeamId, 1)`;
-    `matchScores.set(buzzedTeamId, + 1)`.
-  - `resolveRound(code, { teamId: buzzedTeamId, playerId, playerName, puntos: 1 })`.
-- **`handleMarkIncorrect(code, socketId)`** (botón rojo):
-  - Mismas validaciones que `handleMarkCorrect`.
-  - Si `phase === 'respondiendo'` (primer intento, no robo): `failedTeamId =
-    buzzedTeamId`; `eligibleTeamIds = participating.filter(t => t.id !== failedTeamId).map(t => t.id)`;
-    `buzzedPlayerId = buzzedTeamId = null`; `phase = 'robo'`.
+    si mostrar "esperando a que {nombre} escriba" (los demás) o el campo de texto (el
+    propio jugador, comparando `playerId` con el suyo).
+  - Arranca `RoundTimer(ANSWER_SECONDS)`: `onTick` → emite `rocola_answer_tick`
+    (`remainingSeconds`) a toda la sala; `onEnd` → `this.handleSubmitAnswer(code,
+    socketId, '')` (mismo socket que buzzeó, respuesta vacía — red de contención si
+    nunca llega un `rocola_submit_answer` real, ej. el jugador se desconectó).
+- **`handleSubmitAnswer(code, socketId, texto)`**:
+  - Si `match.phase` ya no es `'respondiendo'`/`'robo_respondiendo'` → no hace nada
+    (`return` silencioso, no lanza error): cubre el caso en que el timeout interno de
+    arriba se dispara un instante después de que un `rocola_submit_answer` real ya
+    resolvió la ronda — la resolución no se duplica.
+  - Si el socket no es `match.buzzedPlayerId` → `NotYourAnswerError`.
+  - `match.timer?.stop(); match.timer = null`.
+  - `acierto = isFuzzyMatch(texto, song.titulo)` (ver "Juicio de la respuesta escrita").
+  - Si `acierto`: `gameEngine.addScore(code, buzzedTeamId, 1)`;
+    `matchScores.set(buzzedTeamId, +1)`; `resolveRound(code, { teamId: buzzedTeamId,
+    playerId, playerName, puntos: 1, respuesta: texto })`.
+  - Si no acierta y `phase === 'respondiendo'` (primer intento, no robo): `failedTeamId
+    = buzzedTeamId`; `eligibleTeamIds = participating.filter(t => t.id !==
+    failedTeamId).map(t => t.id)`; `buzzedPlayerId = buzzedTeamId = null`; `phase =
+    'robo'`.
     - Emite `rocola_audio_control` (`action: 'resume'`).
     - Emite `rocola_robo_started` (`eligibleTeamIds`, `eligibleTeamNames`,
       `remainingSeconds: ROBO_SECONDS`).
-    - `timer = new RoundTimer(() => {}, () => this.resolveRoboTimeout(code))`;
-      `timer.start(ROBO_SECONDS)`.
-  - Si `phase === 'robo_respondiendo'` (falló también el robo):
-    `resolveRound(code, { teamId: null, playerId: null, playerName: null, puntos: 0 })`.
-- **`resolveNoOneBuzzed(code)`** (privado, `onEnd` de la canción sin ningún buzz):
-  `resolveRound(code, { teamId: null, playerId: null, playerName: null, puntos: 0 })`.
-- **`resolveRoboTimeout(code)`** (privado, `onEnd` del robo sin ningún buzz): mismo
-  resultado vacío que arriba.
+    - `timer = new RoundTimer(() => {}, () => this.resolveEmptyRound(code))`;
+      `timer.start(ROBO_SECONDS)` (nadie buzzea durante el robo → resultado vacío).
+  - Si no acierta y `phase === 'robo_respondiendo'` (falló también el robo):
+    `resolveRound(code, { teamId: null, playerId, playerName, puntos: 0, respuesta:
+    texto })` — a diferencia del caso "nadie buzzeó", acá sí hay `playerId`/`playerName`
+    (el que perdió el robo) y la `respuesta` que escribió, para que la revelación pueda
+    mostrarla.
+- **`resolveEmptyRound(code)`** (privado, `onEnd` de la canción o del robo sin ningún
+  buzz): `resolveRound(code, { teamId: null, playerId: null, playerName: null, puntos:
+  0, respuesta: '' })`.
 - **`resolveRound(code, parcial)`** (privado, común a los 4 finales de ronda posibles):
   - `match.timer?.stop(); match.timer = null`.
   - `song = match.songs[match.currentIndex]`.
@@ -337,13 +437,21 @@ valor que Trivia/Adivina la palabra).
 
 ### `la-rocola.gateway.ts`
 
-- Cliente → servidor: `start_la_rocola_game { code }`, `rocola_ready { code }`,
-  `rocola_buzz { code }`, `rocola_mark_correct { code }`,
-  `rocola_mark_incorrect { code }`.
+- Cliente → servidor: `start_la_rocola_game { code, filtro? }`, `rocola_ready { code }`,
+  `rocola_buzz { code }`, `rocola_submit_answer { code, texto }`,
+  `rocola_get_artists { code }` (nuevo — pedido único del host antes de arrancar, ver
+  abajo).
 - Servidor → cliente: reenvía `laRocola.events$` — todos los eventos van a
   `server.to(code)` (toda la sala) **excepto** `rocola_audio_control`, que va target
   por target (`event.targetSocketIds.forEach(id => server.to(id).emit(...))`), mismo
   patrón que `adivina_pantalla_estado` en Adivina la palabra.
+- **`rocola_get_artists`** es la única excepción al patrón "evento → método del
+  servicio → `events$` → broadcast": el gateway responde **directo al socket que
+  preguntó** (`client.emit('rocola_artists', { code, artistas })`), sin pasar por
+  `events$` ni por el resto de la sala — es una consulta de datos estáticos del banco
+  (no cambia con la partida ni con la sala), no un evento de juego. Se puede pedir en
+  cualquier momento, incluso antes de `select_game` — no depende de que exista una
+  partida de La Rocola en curso.
 
 ### `la-rocola.module.ts`
 
@@ -363,6 +471,15 @@ Importa `RoomModule`, `GameEngineModule`, `RocolaContentModule`; provee
     tocar `RocolaContentService`.
   - `startMatch` deja `phase: 'waiting_ready'` y no pide canciones hasta que el
     `ReadyGate` se satisface.
+  - `startMatch(code, { tipo: 'genero', genero: 'salsa' })` con un banco de prueba que
+    tiene ≥10 de salsa → arranca normal; con un banco de prueba con <10 de salsa →
+    `InsufficientFilteredSongsError`, sin crear partida ni tocar `room.status`
+    (`countAvailable` se llama, `selectSongs` no).
+  - Con `filtro` activo satisfecho, al completar el `ReadyGate` las 10 canciones
+    devueltas por `selectSongs` respetan el `filtro` (verificado vía el `filtro`
+    recibido por el proveedor falso).
+  - `getAvailableArtists(code)` devuelve lo mismo que
+    `RocolaContentService.getAvailableArtists()`.
   - `markReady` de todos los jugadores elegibles dispara la carga de canciones y
     arranca la ronda 0 (`countdown`); `markReady` de un socket ajeno a la sala →
     `PlayerNotInRoomError`.
@@ -372,15 +489,23 @@ Importa `RoomModule`, `GameEngineModule`, `RocolaContentModule`; provee
     `rocola_audio_control(play)` + `rocola_buzzer_open`.
   - `handleBuzz` fuera de `sonando`/`robo` → `BuzzerNotOpenError`; durante `robo` con
     un equipo no elegible → `NotEligibleToBuzzError`.
-  - `handleBuzz` pausa el audio, bloquea a los demás (`rocola_buzzer_locked`) y solo el
-    jugador que buzzeó puede resolver (`handleMarkCorrect`/`handleMarkIncorrect` desde
-    otro socket → `NotYourDecisionError`).
-  - Botón verde suma 1 punto al equipo, termina la ronda, revela y agenda
-    `advanceRound` en `REVEAL_DISPLAY_MS`.
-  - Botón rojo en primer intento → arranca robo (`resume` de audio, `rocola_robo_started`
-    con los equipos rivales); botón rojo en el robo → ronda termina sin puntos.
+  - `handleBuzz` pausa el audio, bloquea a los demás (`rocola_buzzer_locked`), arranca
+    los 30s de `rocola_answer_tick`, y solo el jugador que buzzeó puede enviar la
+    respuesta (`handleSubmitAnswer` desde otro socket → `NotYourAnswerError`).
+  - Enviar una respuesta sin ninguna ronda de escritura pendiente no hace nada (no
+    lanza error — cubre el reintento interno del timeout).
+  - Respuesta que matchea (`isFuzzyMatch`, incluye casos con errores de tipeo reales,
+    no solo exactos) suma 1 punto al equipo, termina la ronda, revela (incluida la
+    `respuesta` escrita) y agenda `advanceRound` en `REVEAL_DISPLAY_MS`.
+  - Respuesta que no matchea en el primer intento → arranca robo (`resume` de audio,
+    `rocola_robo_started` con los equipos rivales); no matchea en el robo → ronda
+    termina sin puntos, con la `respuesta` del intento fallido en el resultado.
+  - No se envía nada antes de los 30s (ni un submit real ni texto) → se juzga como
+    respuesta vacía, arranca el robo igual que una respuesta incorrecta.
+  - Un submit real que llega justo cuando el timeout interno también dispara no
+    duplica la resolución de la ronda.
   - Nadie buzzea en los 30s de canción, o nadie buzzea en los 5s de robo → mismo
-    resultado vacío (`teamId: null`), revelación igual.
+    resultado vacío (`teamId: null`, `respuesta: ''`), revelación igual.
   - Se agotan las 10 rondas → `room.status = 'resultados'`, `rocola_match_result` con
     puntaje **de esa partida** y lista de canciones con su equipo ganador (o `null`); a
     los `RESULTS_DISPLAY_MS` (fake timers) → `currentGame` vuelve a `null` sin alterar
@@ -393,16 +518,22 @@ Importa `RoomModule`, `GameEngineModule`, `RocolaContentModule`; provee
   vacía; falso hasta que todos los elegibles marcaron listo; `removePlayer` saca a
   alguien de pendientes y de elegibles; marcar listo a alguien que no está en
   `eligiblePlayerIds` no lo hace elegible (no cambia `isSatisfied`).
-- **`test/la-rocola.e2e-spec.ts`** (sockets reales sobre `AppModule` completo, sin
-  llamada real a iTunes — `RocolaContentService` con banco falso vía módulo de test o
-  variable de entorno que fuerce el proveedor falso): `select_game` →
+- **`answer-matcher.spec.ts`**: exacta, variantes con typos de spec.md ("Rallando el
+  sol", "rayando sol", "rayndo el sol" contra "Rayando el Sol"), sin tildes, subtítulo
+  entre paréntesis ignorado, título de una sola palabra clave exige esa palabra, un
+  título completamente distinto se rechaza aunque comparta alguna palabra suelta.
+- **`test/la-rocola.e2e-spec.ts`** (sockets reales sobre `AppModule` completo,
+  `RocolaContentService` reemplazado por uno con banco de prueba de título conocido —
+  necesario para poder enviar una respuesta "correcta" determinística): `select_game` →
   `start_la_rocola_game` → `rocola_ready_state` con pendientes → cada jugador emite
   `rocola_ready` → al completarse, `rocola_round_started` + conteo → tras el conteo,
   el socket de pantalla recibe `rocola_audio_control(play)` con `previewUrl` → un
-  jugador emite `rocola_buzz` → los demás reciben `rocola_buzzer_locked` → ese jugador
-  emite `rocola_mark_incorrect` → `rocola_robo_started` → un rival emite `rocola_buzz`
-  → `rocola_mark_correct` → `rocola_round_result` con el punto → se repite hasta la
-  décima ronda → `rocola_match_result`.
+  jugador emite `rocola_buzz` → los demás reciben `rocola_buzzer_locked` y
+  `rocola_answer_tick` → ese jugador emite `rocola_submit_answer` con una respuesta sin
+  relación → `rocola_robo_started` → un rival emite `rocola_buzz` →
+  `rocola_submit_answer` con una respuesta correcta pero con una falta de ortografía →
+  `rocola_round_result` con el punto → se repite hasta la décima ronda →
+  `rocola_match_result`.
 
 ## Checklist manual
 

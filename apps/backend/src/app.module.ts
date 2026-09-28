@@ -8,6 +8,8 @@ import { AiContentModule } from './ai-content/ai-content.module.js';
 import { TriviaModule } from './trivia/trivia.module.js';
 import { CarasYGestosModule } from './caras-y-gestos/caras-y-gestos.module.js';
 import { AdivinaPalabraModule } from './adivina-palabra/adivina-palabra.module.js';
+import { RocolaContentModule } from './rocola-content/rocola-content.module.js';
+import { LaRocolaModule } from './la-rocola/la-rocola.module.js';
 
 @Module({
   imports: [
@@ -17,6 +19,8 @@ import { AdivinaPalabraModule } from './adivina-palabra/adivina-palabra.module.j
     TriviaModule,
     CarasYGestosModule,
     AdivinaPalabraModule,
+    RocolaContentModule,
+    LaRocolaModule,
   ],
   controllers: [AppController],
   providers: [AppService, AppGateway],

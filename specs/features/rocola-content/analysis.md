@@ -95,6 +95,12 @@ export interface RocolaSong {
 
 export const MAX_ROCOLA_SONGS_PER_REQUEST = 30;
 export const MAX_SAME_GENERO_PER_MATCH = 2;
+
+// Filtro opcional elegido por el host antes de arrancar la partida — nunca
+// ambos a la vez (ver spec.md → "Filtro opcional por género o artista").
+export type RocolaFiltro =
+  | { tipo: 'genero'; genero: RocolaGenero }
+  | { tipo: 'artista'; artista: string };
 ```
 
 ### `song-preview-provider.ts`
@@ -162,34 +168,59 @@ no una fuente primaria — se revisa/actualiza si deja de andar en alguna sesió
 export class InvalidSongCountError extends Error {}
 ```
 
-`selectSongs(cantidad: number, excluir: string[] = []): Promise<RocolaSong[]>`:
+`selectSongs(cantidad: number, excluir: string[] = [], filtro?: RocolaFiltro): Promise<RocolaSong[]>`:
 
 1. Valida `cantidad` — entero ≥ 1, sin llamar a nada si falla
    (`InvalidSongCountError`).
-2. `pickCandidates(excluir)` (privado): baraja `song-bank.ts` (`random` inyectado,
-   `Math.random` por defecto, mismo criterio que el resto del proyecto para pruebas
-   deterministas), filtra las que están en `excluir`, y arma una lista de candidatas
-   respetando `MAX_SAME_GENERO_PER_MATCH = 2` por género (cuenta por género mientras
-   recorre el barajado, salta la entrada si ese género ya llegó al tope) hasta juntar
-   `cantidad + margen` candidatas (margen = `Math.ceil(cantidad * 0.5)`, para tener con
-   qué reemplazar las que no tengan preview).
+2. `pickCandidates(excluir, filtro)` (privado): parte de `song-bank.ts`, y si hay
+   `filtro` lo aplica primero — `entry.genero === filtro.genero` o
+   `normalizeArtista(entry.artista) === normalizeArtista(filtro.artista)` (helper
+   local mínimo — minúsculas + sin tildes — para no depender de que el nombre llegue
+   con capitalización idéntica; **no** se importa `answer-matcher.ts` de `la-rocola`
+   para esto — sería una dependencia cruzada al revés, `rocola-content` no conoce
+   `la-rocola`, constitution.md principio 4) — antes de barajar
+   (`random` inyectado, `Math.random` por defecto, mismo criterio que el resto del
+   proyecto para pruebas deterministas). Filtra las que están en `excluir`, y arma una
+   lista de candidatas hasta juntar `cantidad + margen` (margen =
+   `Math.ceil(cantidad * 0.5)`, para tener con qué reemplazar las que no tengan
+   preview).
+   - **`MAX_SAME_GENERO_PER_MATCH` solo se aplica sin `filtro`.** Con un filtro activo
+     (por género o por artista) el tope no tiene sentido — o ya coincide con lo pedido,
+     o es irrelevante — así que no se cuenta por género en ese caso.
    - Si tras filtrar `excluir` no hay `cantidad` canciones distintas disponibles en
-     absoluto (banco agotado para esta sala) → se reintenta `pickCandidates([])` (sin
-     exclusión) una sola vez — decisión de `spec.md`: se prefiere repetir canciones muy
-     viejas de la sala antes que bloquear la partida.
+     absoluto (banco, ya angostado por `filtro` si corresponde, agotado para esta sala)
+     → se reintenta `pickCandidates([], filtro)` (sin exclusión, mismo `filtro`) una
+     sola vez — decisión de `spec.md`: se prefiere repetir canciones muy viejas de la
+     sala antes que bloquear la partida.
 3. Si hay `SONG_PREVIEW_PROVIDER` configurado: `provider.lookup(candidatas.map(c =>
    c.itunesTrackId))`.
    - Éxito: arma `RocolaSong[]` con las candidatas que sí aparecen en el `Map`
      devuelto, en el orden barajado, hasta `cantidad`. Si no alcanzan (algunas sin
      preview), repite el paso 2-3 con un lote nuevo de candidatas (excluyendo las ya
-     descartadas), hasta `MAX_LOOKUP_ATTEMPTS = 3` intentos.
+     descartadas, mismo `filtro`), hasta `MAX_LOOKUP_ATTEMPTS = 3` intentos.
    - Si tras los reintentos sigue faltando, o el `lookup` mismo lanza error (red caída):
-     completa el resto desde `song-fallback-bank.ts` (mismas reglas de `excluir` y tope
-     de género, sin llamada de red — ya trae preview/portada), con `Logger.warn`.
+     completa el resto desde `song-fallback-bank.ts` (mismas reglas de `excluir` y
+     `filtro`, sin llamada de red — ya trae preview/portada), con `Logger.warn`. Si el
+     banco de respaldo tampoco tiene suficientes entradas que matcheen el `filtro`,
+     devuelve las que consiga — mismo caso límite aceptado que sin filtro.
 4. Nunca propaga un error del proveedor externo hacia quien llama — mismo principio que
    `AiContentService` con la IA (constitution.md, resiliencia ante servicios externos
    en el camino crítico).
 5. `random` es parámetro del constructor, igual que en el resto del proyecto.
+
+`countAvailable(filtro?: RocolaFiltro): number` — cuenta cuántas entradas de
+`song-bank.ts` matchean el `filtro` (o el total del banco si no hay `filtro`), **sin
+mirar `excluir`** (deliberado: la validación de "hay suficientes para arrancar" es
+sobre el banco completo, no sobre lo ya usado en esa sala — el propio `excluir` ya
+tiene su reset-si-no-alcanza dentro de `selectSongs`; mezclar ambos acá solo
+complicaría la validación sin agregar nada, ver "Decisión: validar antes de arrancar"
+en `la-rocola-module/analysis.md`). Sin red, síncrono.
+
+`getAvailableArtists(): string[]` — nombres de artista **distintos**, tal como están
+escritos en `song-bank.ts` (no en `song-fallback-bank.ts` — es la lista que ve el host
+al elegir el filtro, y el banco principal es la fuente real de la partida), ordenados
+alfabéticamente. Sin red, síncrono — usado para poblar el `<select>` del host, nunca
+para búsqueda libre (ver la decisión de UI en `la-rocola-ui/analysis.md`).
 
 ### `rocola-content.module.ts`
 
@@ -209,6 +240,12 @@ global).
   `song-fallback-bank.ts`; cantidad inválida (0, negativa, no entera) → error sin
   llamar al proveedor; banco sin suficientes canciones nuevas tras `excluir` → se
   reintenta sin exclusión en vez de fallar.
+  - **Con `filtro` por género**: las 10 devueltas son todas de ese género, sin importar
+    que eso implique más de 2 del mismo género; con `filtro` por artista, las 10 son de
+    ese artista (comparación insensible a tildes/mayúsculas); el banco de respaldo
+    también respeta el `filtro` al completar; `countAvailable(filtro)` cuenta bien para
+    género, para artista, y para "sin filtro" (= tamaño total del banco);
+    `getAvailableArtists()` devuelve nombres únicos y ordenados.
 - **`itunes-preview-provider.spec.ts`**: doble de `fetch` global (sin red real);
   mapea `previewUrl`/`artworkUrl100`→`portadaUrl` (600x600) correctamente; una entrada
   sin `previewUrl` en la respuesta queda fuera del `Map`; timeout → `SongPreviewLookupError`;

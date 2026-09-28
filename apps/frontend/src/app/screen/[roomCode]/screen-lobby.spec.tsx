@@ -294,6 +294,17 @@ describe("ScreenLobby", () => {
     });
   });
 
+  it("con La Rocola elegido, muestra su pantalla en vez del lobby", async () => {
+    render(<ScreenLobby roomCode="ABCDE" />);
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(makeRoom({ currentGame: "la-rocola" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /empezar/i })).toBeInTheDocument();
+      expect(screen.queryByPlaceholderText("Nombre del equipo")).not.toBeInTheDocument();
+    });
+  });
+
   it("de punta a punta: terminada una partida y vuelto al panel, elegir Trivia de nuevo arranca (no muestra el resultado viejo)", async () => {
     render(<ScreenLobby roomCode="ABCDE" />);
     lastSocket?.triggerConnect();
