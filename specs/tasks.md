@@ -124,9 +124,19 @@ Cada una de estas nueve tareas incluye: módulo backend, componentes de pantalla
 
 - [x] Selector de "siguiente juego" entre ronda y ronda, sin tener que recrear la sala. (El panel para elegir el primer juego, tras armar equipos, ya se construye en Fase 2 — esta tarea es reutilizar/extender esa misma base para la transición entre partidas sucesivas.)
 - [x] Marcador acumulado visible entre minijuegos.
-- [ ] Manejo de reconexión (un jugador pierde señal y vuelve a entrar con el mismo código sin perder su lugar en el equipo).
+- [ ] Manejo de reconexión (un jugador pierde señal y vuelve a entrar con el mismo código sin perder su lugar en el equipo). Depende de: `specs/features/room-lifecycle/analysis.md`. Ver `specs/features/player-reconnection/analysis.md` (subtareas de backend y frontend separadas).
 - [x] Persistir preguntas generadas por IA en `content_banks` (Postgres) para reusarlas y como respaldo creciente. Depende de: `specs/features/ai-content-trivia/analysis.md`.
-- [ ] Limpieza de salas abandonadas: hoy una sala nunca se borra del `Map` en memoria de `RoomModule` — ni cuando el host se desconecta (no se detecta, no es un `Player`) ni cuando se van todos los jugadores. Definir un criterio de expiración/limpieza (ej. TTL de inactividad) para no acumular estado indefinidamente en el proceso.
+- [ ] Limpieza de salas abandonadas: hoy una sala nunca se borra del `Map` en memoria de `RoomModule` — ni cuando el host se desconecta (no se detecta, no es un `Player`) ni cuando se van todos los jugadores. Definir un criterio de expiración/limpieza (ej. TTL de inactividad) para no acumular estado indefinidamente en el proceso. Ver `specs/features/room-lifecycle/analysis.md` (amplía el alcance: host caído, limpieza en cascada de los servicios de juego, tope de salas).
+
+## Fase 5 — Puesta en producción
+
+Índice y decisiones generales en `specs/features/production-readiness/analysis.md`. Las tareas de Fase 4 "Manejo de reconexión" y "Limpieza de salas abandonadas" (arriba) son los pasos 1b y 1a de esta fase.
+
+- [ ] Endurecimiento del servidor: validación de payloads, rol de host, rate limits, tope de IA, CORS, `/health`, cierre ordenado. Ver `specs/features/server-hardening/analysis.md` (subtareas de backend y frontend separadas; el rol de host comparte patrón con `specs/features/player-reconnection/analysis.md`).
+- [ ] Empaquetado: `Dockerfile` del backend, validación de configuración al arrancar, `.env.example` completos, job `docker` en CI. Ver `specs/features/deploy-packaging/analysis.md`.
+- [ ] Staging: backend en contenedor persistente + frontend en Vercel, HTTPS/WSS. Depende de: `specs/features/deploy-packaging/analysis.md`, `specs/features/room-lifecycle/analysis.md`, `specs/features/player-reconnection/analysis.md` y `specs/features/server-hardening/analysis.md`. Ver `specs/features/deploy-staging/analysis.md`.
+- [ ] Prueba real con celulares en staging (checklist manual, solo esbozada en `specs/features/production-readiness/analysis.md`). Depende de: `specs/features/deploy-staging/analysis.md`.
+- [ ] Apertura al público (tope de gasto de Anthropic, alertas, página de error, decisión de acceso). Solo esbozada en `specs/features/production-readiness/analysis.md`; se analiza a fondo cuando lo anterior esté cerrado.
 
 ## Explícitamente no en el backlog de v1
 
