@@ -67,11 +67,16 @@ como nota en `la-rocola-ui/analysis.md`, no se bifurca una copia local.
     viaja en cada tick de `memoriza_memorizando`.
 - **`word-board.tsx`** (+ `.module.css`, `.spec.tsx`): `{ items: MemorizaTablaItem[] }`
   donde cada item trae `{ id, imagenUrl, pista, estado, equipoQueAcerto, teamColor?
-  }`. Misma grilla que `object-grid`, pero cada celda muestra: la imagen, y debajo el
-  patrón de blanks (`pista`, ej. "M _ _ _ _ _ _") si `estado === 'oculta'`, o la
-  palabra completa en el color del equipo (`teamColor`, resuelto por el padre a partir
-  de `equipoQueAcerto` + `teams`) si `estado === 'revelada'`. Un solo componente para
-  ambos estados de celda (no dos componentes separados) — la transición
+  }`. Misma grilla que `object-grid`, pero cada celda muestra: **la imagen solo si
+  `estado === 'revelada'`** (mientras sigue `'oculta'`, un placeholder del mismo
+  tamaño reserva el espacio — pedido de Kalin tras jugar la partida, para no mostrar
+  la imagen mientras nadie la adivinó) — y debajo el patrón de blanks (`pista`, ej.
+  "M _ _ _ _ _ _") si `estado === 'oculta'`, o la palabra completa en el color del
+  equipo (`teamColor`, resuelto por el padre a partir de `equipoQueAcerto` + `teams` —
+  `equipoQueAcerto: null` con `estado: 'revelada'` es el caso de un objeto que nadie
+  adivinó, revelado igual al terminar la partida, sin color de equipo) si `estado ===
+  'revelada'`. Un solo componente para ambos estados de celda (no dos componentes
+  separados) — la transición
   oculta→revelada de una celda puntual es lo único que cambia visualmente en esta
   pantalla durante toda la fase de adivinanza.
 - **`team-clocks.tsx`** (+ `.module.css`, `.spec.tsx`): `{ clocks: { teamId: string;
@@ -178,15 +183,29 @@ visible desde `adivinando` en adelante (no antes — no hay puntaje que mostrar 
   con fondo propio, fuera del área donde `scatterPositions`/`orbit` pueden colocar
   imágenes — mismo criterio de "no interfiere con la imagen" de `spec.md`).
 - `adivinando`: `<WordBoard items={...}>` (con `teamColor` resuelto desde `teams` de
-  `RoomState`) + `<TeamClocks clocks={...}>` + texto "Turno de **{jugadorActivo.playerName}**
-  ({jugadorActivo.teamId})". Un `useEffect` sobre `[ultimoIntento]` (ver más abajo)
-  dispara `playCorrectSound()`/`playIncorrectSound()` según `acierto` del último
-  `memoriza_intento_resultado` recibido — igual criterio anti-duplicado con un
-  `nonce`/id de evento que `laRocolaAudio` en `la-rocola-ui`, porque dos intentos
+  `RoomState`) + `<TeamClocks clocks={...}>` + texto "Turno de **{jugadorActivo.playerName}**".
+  El nombre va en una etiqueta grande (`clamp(32px, 4.5vw, 56px)`, fondo del color del
+  equipo del jugador activo) para que se lea de lejos — se ajustó el `gap`/`padding` de
+  `.page` para que `WordBoard` no pierda espacio. Un `useEffect` sobre `[ultimoIntento]`
+  (ver más abajo) dispara `playCorrectSound()`/`playIncorrectSound()` según `acierto`
+  del último `memoriza_intento_resultado` recibido — igual criterio anti-duplicado con
+  un `nonce`/id de evento que `laRocolaAudio` en `la-rocola-ui`, porque dos intentos
   fallidos seguidos no deberían colapsar en un solo sonido.
-- `match_result`: `<MatchWinnerBanner>` + lista de qué equipo adivinó cada palabra,
-  `playVictorySound()` una sola vez al llegar (mismo criterio que el resto de los
-  juegos).
+- `match_result`: **no cambia de vista** — se queda la misma pantalla que `adivinando`
+  (mismo `WordBoard`, mismo lugar en el layout) para que el tablero completo (20
+  objetos) se siga viendo sin scroll. Solo cambian: el `<TeamClocks>` + texto de turno
+  se reemplazan por `<MatchWinnerBanner>` en el mismo lugar (mismo tamaño de fuente
+  compacto), y `<MatchScoreboard>` (esquina superior derecha, igual que durante
+  `adivinando`) pasa a mostrar `memorizaObjetos.scores` en vez del puntaje derivado de
+  `clocks`. `<WordBoard items={memorizaObjetos.items}>` es el mismo componente que
+  `adivinando` — el backend ya manda el tablero completo revelado en
+  `memoriza_match_result.items`, así se ven también las imágenes y palabras de los
+  objetos que nadie adivinó (marcadas en `WordBoard` con un estilo gris/borde
+  punteado propio, `equipoQueAcerto: null`, para no confundirlas con un acierto de
+  equipo). `playVictorySound()` suena una sola vez al llegar (mismo criterio que el
+  resto de los juegos). Se descartó la lista de qué equipo adivinó cada palabra y el
+  título "Resultado final" de una pantalla de resultado separada: apilaban contenido
+  arriba del tablero y lo obligaban a hacer scroll.
 
 ### Último intento (para el sonido de acierto/error)
 
@@ -222,12 +241,16 @@ puntual, mismo patrón exacto que `laRocolaAudio` en `la-rocola-ui/analysis.md`)
 ### `<GuessForm>` (subcomponente local del archivo)
 
 Maneja su propio `useState` de texto y un guard de "ya envié" (se deshabilita tras
-enviar, hasta que llegue el siguiente `memoriza_turno_jugador` dirigido a este
-jugador — en la práctica nunca pasa dos veces seguidas al mismo jugador salvo que
-sea el único integrante restante de un equipo ya sin rival, caso ya cubierto por el
-backend). Se monta de nuevo con `key={`guess-${jugadorActivo.playerId}-${equipoActivoId}`}`
-para resetear ese estado entre turnos distintos, mismo criterio que `BuzzButton`/
-`AnswerForm` en `play-la-rocola.tsx`.
+enviar, hasta el turno siguiente). Se monta de nuevo con
+`key={`guess-${memorizaObjetos.turnNumber}`}` para resetear ese estado entre turnos —
+**no** con `playerId`/`teamId`, porque en el caso "sin alternar" (el equipo contrario se
+queda sin tiempo) el mismo jugador puede repetir turno una y otra vez sin que esos dos
+valores cambien nunca; con ellos como key, el formulario quedaba deshabilitado para
+siempre después del primer envío (bug reportado en una partida 1 vs 1). `turnNumber`
+(`MemorizaTableroPayload`, ver `memoriza-objetos-module/analysis.md`) sube una sola vez
+por turno del lado del backend, así que sirve de key incluso cuando el jugador activo no
+cambia. Mismo criterio de remount-por-turno que `BuzzButton`/`AnswerForm` en
+`play-la-rocola.tsx`, ahí con `roundNumber`.
 
 ## Checklist manual (Kalin, tras implementación)
 
@@ -245,11 +268,18 @@ para resetear ese estado entre turnos distintos, mismo criterio que `BuzzButton`
    aparece recién a los 10 segundos.
 4. Enviar una palabra correcta (probar también con un error de tipeo chico) revela
    esa celda con el color del equipo y detiene su reloj; el turno pasa al otro
-   equipo, cuyo reloj arranca a correr.
+   equipo, cuyo reloj arranca a correr. En la pantalla, confirmar que el nombre del
+   jugador en turno ("Turno de **{nombre}**") se lee cómodo desde lejos (letra grande,
+   con el color del equipo de fondo) y que el tablero de 20 objetos se sigue viendo
+   completo, sin necesidad de hacer scroll.
 5. Dejar que el reloj de un equipo llegue a cero mientras juega: confirmar que el
    turno le sigue tocando solo al equipo con tiempo restante, sin volver a alternar.
 6. Terminar la partida (ambos relojes en 0, o revelando las 20 palabras) y confirmar
-   el banner de ganador/empate, el sonido de victoria, y que a los 10 segundos la
-   sala vuelve sola al panel de selección de juego.
+   que la pantalla **no cambia de vista**: aparece el banner de ganador/empate arriba
+   (en el mismo lugar donde estaba "Turno de..."), el marcador final en la esquina
+   superior derecha, y el mismo tablero de 20 objetos sigue ahí completo y sin scroll,
+   ahora con las palabras de los objetos que nadie adivinó (en gris, con borde
+   punteado, para distinguirlas de las adivinadas). El sonido de victoria suena una
+   vez y a los 10 segundos la sala vuelve sola al panel de selección de juego.
 7. Jugar una segunda partida en la misma sala y confirmar que no se repite ningún
    objeto ya mostrado en la primera.

@@ -19,6 +19,7 @@ function playTone(
   startTime: number,
   durationSeconds: number,
   type: OscillatorType,
+  peakGain = 0.3,
 ): void {
   const oscillator = context.createOscillator();
   const gain = context.createGain();
@@ -28,7 +29,7 @@ function playTone(
   // Envolvente corta (attack/decay) para evitar el "click" de un tono que
   // arranca/termina de golpe.
   gain.gain.setValueAtTime(0, startTime);
-  gain.gain.linearRampToValueAtTime(0.3, startTime + 0.01);
+  gain.gain.linearRampToValueAtTime(peakGain, startTime + 0.01);
   gain.gain.exponentialRampToValueAtTime(0.001, startTime + durationSeconds);
 
   oscillator.connect(gain);
@@ -80,4 +81,53 @@ export function playVictorySound(): void {
   playTone(context, 659.25, now + 0.12, 0.15, "sine");
   playTone(context, 783.99, now + 0.24, 0.15, "sine");
   playTone(context, 1046.5, now + 0.36, 0.35, "sine");
+}
+
+// Música de fondo mientras se juega — mismo criterio que el resto del
+// archivo: sintetizada, sin archivos ni tema de licencias. Un arpegio corto y
+// alegre en pentatónica de Do (C4 D4 E4 G4 A4 G4 E4 D4) con un bajo suave
+// cada dos notas, en loop. Volumen bajo (`peakGain` bien por debajo del 0.3
+// de los efectos) para no tapar los sonidos de acierto/error/tick.
+const MUSIC_NOTE_SECONDS = 0.27;
+const MUSIC_MELODY = [261.63, 293.66, 329.63, 392.0, 440.0, 392.0, 329.63, 293.66];
+const MUSIC_BASS: (number | null)[] = [130.81, null, 196.0, null, 130.81, null, 196.0, null];
+const MUSIC_LOOP_MS = MUSIC_MELODY.length * MUSIC_NOTE_SECONDS * 1000;
+
+let musicPlaying = false;
+let musicTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleMusicLoop(context: AudioContext, startTime: number): void {
+  MUSIC_MELODY.forEach((frequency, i) => {
+    const noteStart = startTime + i * MUSIC_NOTE_SECONDS;
+    playTone(context, frequency, noteStart, MUSIC_NOTE_SECONDS * 0.85, "triangle", 0.06);
+    const bassFrequency = MUSIC_BASS[i];
+    if (bassFrequency) {
+      playTone(context, bassFrequency, noteStart, MUSIC_NOTE_SECONDS * 1.8, "sine", 0.05);
+    }
+  });
+
+  musicTimeoutId = setTimeout(() => {
+    if (!musicPlaying) return;
+    scheduleMusicLoop(context, context.currentTime);
+  }, MUSIC_LOOP_MS);
+}
+
+// No pasa nada si ya está sonando (idempotente) — quien la usa no tiene que
+// llevar la cuenta de si ya la arrancó.
+export function startBackgroundMusic(): void {
+  const context = getAudioContext();
+  if (!context || musicPlaying) return;
+  musicPlaying = true;
+  scheduleMusicLoop(context, context.currentTime);
+}
+
+// Corta la siguiente vuelta del loop — las notas de la vuelta actual, ya
+// agendadas en el AudioContext, terminan de sonar solas (cola de ≤ 2.2s en
+// vez de un corte seco).
+export function stopBackgroundMusic(): void {
+  musicPlaying = false;
+  if (musicTimeoutId !== null) {
+    clearTimeout(musicTimeoutId);
+    musicTimeoutId = null;
+  }
 }

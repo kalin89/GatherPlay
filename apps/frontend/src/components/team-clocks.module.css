@@ -1,0 +1,45 @@
+.row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.clock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+.activo {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.activo .teamName,
+.activo .time {
+  color: #1f2937;
+}
+
+.swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.teamName {
+  font-size: clamp(13px, 1.6vw, 18px);
+  font-weight: 700;
+  color: #fff;
+}
+
+.time {
+  font-size: clamp(16px, 2vw, 24px);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}

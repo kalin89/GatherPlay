@@ -141,6 +141,7 @@ export type MemorizaObjetosEvent =
       clocks: MemorizaTeamClock[];
       equipoActivoId: string | null;
       jugadorActivo: { teamId: string; playerId: string; playerName: string } | null;
+      turnNumber: number; // sube una sola vez por turno en `startTurn`, ver más abajo
     }
   | {
       type: 'memoriza_turno_jugador';
@@ -150,7 +151,7 @@ export type MemorizaObjetosEvent =
       puedePasar: boolean;
     }
   | { type: 'memoriza_intento_resultado'; code: string; teamId: string; acierto: boolean; palabra: string | null }
-  | { type: 'memoriza_match_result'; code: string; scores: TeamScore[]; palabrasPorEquipo: { teamId: string; palabras: string[] }[] };
+  | { type: 'memoriza_match_result'; code: string; scores: TeamScore[]; palabrasPorEquipo: { teamId: string; palabras: string[] }[]; items: MemorizaBoardItemPublic[] };
 ```
 
 `memoriza_tablero` va a `${code}:screen` y también a todos los jugadores en espera
@@ -160,6 +161,16 @@ va únicamente al socket del jugador activo — es la única fuente de verdad de
 `remainingSeconds` fino y de si "Pasar" ya está habilitado (`puedePasar`); reusa el
 mismo `remainingSeconds` que ya viaja en `memoriza_tablero` para el reloj del equipo
 activo, así que la pantalla y el celular del jugador activo siempre están en sync.
+
+`turnNumber` (`MemorizaMatchState.turnNumber`, arranca en 0 y se incrementa en
+`startTurn`, antes de crear el `RoundTimer` del turno) es lo que le permite al celular
+del jugador activo distinguir un turno nuevo de uno que sigue. `memoriza_tablero` se
+reemite en cada tick de 1 segundo (para refrescar `clocks`), así que no alcanza con un
+nonce generado del lado del cliente cada vez que llega el evento — remontaría el
+formulario de respuesta cada segundo y borraría lo que el jugador está escribiendo.
+`turnNumber` en cambio solo cambia cuando `startTurn` corre de nuevo, incluso en el caso
+"sin alternar" de más abajo, donde `activeTeamId`/`activePlayerId` no cambian porque el
+mismo equipo (a veces el mismo jugador) repite turno.
 
 ### `memoriza-objetos.service.ts`
 
@@ -282,8 +293,14 @@ equipo.
   3. Si no terminó: `startTurn(code)`.
 - **`finishMatch(code)`** (privado):
   - `room.status = 'resultados'`, `room.round = null`, emite `room_state`.
+  - **Revela lo que quedó sin adivinar** (iteración 2026-09-28, pedido de Kalin tras
+    jugar la partida): cualquier `item` que siga `estado === 'oculta'` pasa a
+    `'revelada'` (sin tocar `equipoQueAcerto`, que se queda en `null` — así el
+    frontend lo pinta neutro, distinto del color de un equipo que sí acertó).
   - Emite `memoriza_match_result` con `scores` desde `matchScores` (no desde
-    `team.score` acumulado) y `palabrasPorEquipo` desde `matchWords`.
+    `team.score` acumulado), `palabrasPorEquipo` desde `matchWords`, y `items` con el
+    tablero completo ya revelado (`this.toPublicItems(match.items)` — mismo helper
+    privado que usa `emitTablero`, extraído para no duplicar el mapeo).
   - Agrega los `id` de los 20 `items` de esta partida al `used` persistente de la sala.
   - `scheduleReturnToSelection(code)` — mismo mecanismo (`this.scheduler`,
     `RESULTS_DISPLAY_MS = 10_000`) que `AdivinaPalabraService.finishMatch`.

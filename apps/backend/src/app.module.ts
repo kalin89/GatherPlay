@@ -10,6 +10,8 @@ import { CarasYGestosModule } from './caras-y-gestos/caras-y-gestos.module.js';
 import { AdivinaPalabraModule } from './adivina-palabra/adivina-palabra.module.js';
 import { RocolaContentModule } from './rocola-content/rocola-content.module.js';
 import { LaRocolaModule } from './la-rocola/la-rocola.module.js';
+import { MemorizaObjetosContentModule } from './memoriza-objetos-content/memoriza-objetos-content.module.js';
+import { MemorizaObjetosModule } from './memoriza-objetos/memoriza-objetos.module.js';
 
 @Module({
   imports: [
@@ -21,6 +23,8 @@ import { LaRocolaModule } from './la-rocola/la-rocola.module.js';
     AdivinaPalabraModule,
     RocolaContentModule,
     LaRocolaModule,
+    MemorizaObjetosContentModule,
+    MemorizaObjetosModule,
   ],
   controllers: [AppController],
   providers: [AppService, AppGateway],

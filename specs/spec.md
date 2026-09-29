@@ -127,6 +127,11 @@ convenciones es una tarea aparte en `tasks.md`, no se reabren esas tareas para e
   partida termina, **then** esos puntos ya quedaron sumados al puntaje acumulado de
   cada equipo (mismo mecanismo que "Fases, temporizador y puntaje" en "Motor de sala")
   y ese acumulado se ve reflejado en el panel de selección de juego.
+- **Given** un minijuego en curso en la pantalla (host/TV), **when** no es La Rocola,
+  **then** suena de fondo, bajito, una música instrumental sintetizada (sin archivos ni
+  licencias, mismo criterio que los efectos de sonido). No suena en el celular de los
+  jugadores. En La Rocola no suena, porque ahí hay que escuchar la canción que se está
+  adivinando.
 
 ## Contenido de IA — Trivia
 
@@ -473,6 +478,9 @@ deja anotado como posible evolución del juego, no se diseña ni se implementa a
   cíclica (no hay un número fijo de turnos por partida, a diferencia del resto de los
   minijuegos, porque acá lo corta el reloj de cada equipo o que se adivinen las 20
   palabras).
+- **Given** la grilla de pistas, **when** un objeto todavía no fue adivinado, **then**
+  su imagen no se muestra — solo la pista de una letra — dejando el espacio reservado
+  para que la grilla no salte de tamaño cuando esa palabra se revele.
 - **Given** el jugador en turno, **when** le toca jugar, **then** su celular muestra un
   campo de texto y un botón "Enviar" (deshabilitado con el campo vacío), y el reloj de
   su equipo empieza a descender; el resto de los celulares y la pantalla ven quién
@@ -511,7 +519,10 @@ deja anotado como posible evolución del juego, no se diseña ni se implementa a
   muestra el resultado final con el puntaje **obtenido en esa partida** por cada
   equipo (no el acumulado entre partidas), el equipo ganador (o "Empate" si ambos
   quedaron igual) con un sonido de victoria, y a los 10 segundos la sala vuelve sola al
-  panel de selección de juego — misma convención que Adivina la palabra.
+  panel de selección de juego — misma convención que Adivina la palabra. Junto con el
+  resultado, se revela también la imagen y la palabra de cualquier objeto que ningún
+  equipo llegó a adivinar (sin el color de ningún equipo, para diferenciarlo de los que
+  sí se acertaron), para que ambos equipos vean cuáles eran.
 - **Given** una sala donde ya se jugó al menos una partida de "Memoriza los objetos",
   **when** se vuelve a elegir este juego en la misma sala, **then** no se repiten
   objetos ya usados en partidas anteriores de esa sala, salvo que se agote el banco

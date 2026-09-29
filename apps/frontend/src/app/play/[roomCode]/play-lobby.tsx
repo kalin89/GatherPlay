@@ -9,11 +9,13 @@ import type { TriviaMatchView } from "@/lib/trivia-match";
 import type { GestosMatchView } from "@/lib/gestos-match";
 import type { AdivinaPalabraView } from "@/lib/adivina-palabra-match";
 import type { LaRocolaView } from "@/lib/la-rocola-match";
+import type { MemorizaObjetosView } from "@/lib/memoriza-objetos-match";
 import { TeamBoard } from "@/components/team-board";
 import { PlayTrivia } from "./play-trivia";
 import { PlayGestos } from "./play-gestos";
 import { PlayAdivinaPalabra } from "./play-adivina-palabra";
 import { PlayLaRocola } from "./play-la-rocola";
+import { PlayMemorizaObjetos } from "./play-memoriza-objetos";
 import styles from "./play-lobby.module.css";
 
 const MAX_NAME_LENGTH = 20;
@@ -37,6 +39,10 @@ function renderGameControl(
   markRocolaReady: () => void,
   rocolaBuzz: () => void,
   submitRocolaAnswer: (texto: string) => void,
+  memorizaObjetos: MemorizaObjetosView,
+  markMemorizaReady: () => void,
+  submitMemorizaGuess: (texto: string) => void,
+  passMemorizaTurn: () => void,
   actionError: { message: string } | null,
 ): ReactNode {
   switch (gameId) {
@@ -85,6 +91,18 @@ function renderGameControl(
           actionError={actionError}
         />
       );
+    case "memoriza-objetos":
+      return (
+        <PlayMemorizaObjetos
+          state={state}
+          playerId={playerId}
+          memorizaObjetos={memorizaObjetos}
+          markMemorizaReady={markMemorizaReady}
+          submitMemorizaGuess={submitMemorizaGuess}
+          passMemorizaTurn={passMemorizaTurn}
+          actionError={actionError}
+        />
+      );
     default:
       return (
         <main className={styles.page}>
@@ -105,6 +123,7 @@ export function PlayLobby({ roomCode }: { roomCode: string }) {
     gestos,
     adivinaPalabra,
     laRocola,
+    memorizaObjetos,
     join,
     submitAnswer,
     startGestosTurn,
@@ -115,6 +134,9 @@ export function PlayLobby({ roomCode }: { roomCode: string }) {
     markRocolaReady,
     rocolaBuzz,
     submitRocolaAnswer,
+    markMemorizaReady,
+    submitMemorizaGuess,
+    passMemorizaTurn,
   } = useJoinRoom(roomCode);
   const [name, setName] = useState("");
 
@@ -154,6 +176,10 @@ export function PlayLobby({ roomCode }: { roomCode: string }) {
         markRocolaReady,
         rocolaBuzz,
         submitRocolaAnswer,
+        memorizaObjetos,
+        markMemorizaReady,
+        submitMemorizaGuess,
+        passMemorizaTurn,
         actionError,
       );
     }

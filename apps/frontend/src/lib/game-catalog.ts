@@ -28,6 +28,12 @@ export const GAME_CATALOG: GameCatalogEntry[] = [
     description:
       'El primero en presionar "¡Me la sé!" cuando suena la canción tiene la oportunidad de adivinarla.',
   },
+  {
+    id: "memoriza-objetos",
+    label: "Memoriza los objetos",
+    description:
+      "Memoricen 20 objetos en 30 segundos; después cada equipo compite por escribirlos a partir de una sola letra, con su propio reloj.",
+  },
 ];
 
 export function getGameLabel(gameId: GameId): string {

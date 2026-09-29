@@ -1,0 +1,77 @@
+.page {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  background: linear-gradient(-45deg, #0891b2, #2563eb, #7c3aed, #0891b2);
+  background-size: 400% 400%;
+  animation: memoriza-gradient-shift 18s ease infinite;
+}
+
+@keyframes memoriza-gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.hint {
+  font-size: clamp(14px, 1.8vw, 18px);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.attentionTitle {
+  font-size: clamp(32px, 6vw, 64px);
+  font-weight: 800;
+  color: #fff;
+  text-align: center;
+  animation: memoriza-pulse 1s ease-in-out infinite;
+}
+
+@keyframes memoriza-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+.memorizeCountdown {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 16px;
+  padding: 4px 20px;
+}
+
+.turnLabel {
+  font-size: clamp(20px, 2.6vw, 30px);
+  color: #fff;
+  text-align: center;
+}
+
+.turnName {
+  display: inline-block;
+  font-size: clamp(32px, 4.5vw, 56px);
+  font-weight: 900;
+  color: #fff;
+  padding: 4px 18px;
+  border-radius: 14px;
+}
+
+.resultBanner {
+  text-align: center;
+}

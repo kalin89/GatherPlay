@@ -3,6 +3,13 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ScreenLobby } from "./screen-lobby";
 import type { RoomState } from "@/lib/room-types";
 
+const { startBackgroundMusic, stopBackgroundMusic } = vi.hoisted(() => ({
+  startBackgroundMusic: vi.fn(),
+  stopBackgroundMusic: vi.fn(),
+}));
+
+vi.mock("@/lib/game-sounds", () => ({ startBackgroundMusic, stopBackgroundMusic }));
+
 // Doble mínimo de un socket de Socket.io: guarda los handlers registrados
 // con `.on(...)` y expone `emitEvent` para simular mensajes del servidor
 // en las pruebas.
@@ -69,6 +76,11 @@ describe("ScreenLobby", () => {
   afterEach(() => {
     lastSocket = null;
     vi.restoreAllMocks();
+    // `restoreAllMocks` no limpia el historial de llamadas de mocks creados
+    // con `vi.fn()` (solo los de `vi.spyOn`) — hace falta para que
+    // startBackgroundMusic/stopBackgroundMusic (mockeados a nivel de
+    // archivo) no arrastren llamadas de un test al siguiente.
+    vi.clearAllMocks();
   });
 
   it("emite watch_room con el código de sala al conectar", () => {
@@ -303,6 +315,32 @@ describe("ScreenLobby", () => {
       expect(screen.getByRole("button", { name: /empezar/i })).toBeInTheDocument();
       expect(screen.queryByPlaceholderText("Nombre del equipo")).not.toBeInTheDocument();
     });
+  });
+
+  it("arranca la música de fondo al entrar a un juego, y la corta al volver al panel", async () => {
+    render(<ScreenLobby roomCode="ABCDE" />);
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(makeRoom());
+
+    expect(startBackgroundMusic).not.toHaveBeenCalled();
+
+    lastSocket?.triggerRoomState(makeRoom({ currentGame: "trivia" }));
+    await waitFor(() => expect(startBackgroundMusic).toHaveBeenCalled());
+
+    lastSocket?.triggerRoomState(makeRoom());
+    await waitFor(() => expect(stopBackgroundMusic).toHaveBeenCalled());
+  });
+
+  it("en La Rocola no arranca la música de fondo (hay que escuchar la canción)", async () => {
+    render(<ScreenLobby roomCode="ABCDE" />);
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(makeRoom({ currentGame: "la-rocola" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /empezar/i })).toBeInTheDocument();
+    });
+    expect(startBackgroundMusic).not.toHaveBeenCalled();
+    expect(stopBackgroundMusic).toHaveBeenCalled();
   });
 
   it("de punta a punta: terminada una partida y vuelto al panel, elegir Trivia de nuevo arranca (no muestra el resultado viejo)", async () => {

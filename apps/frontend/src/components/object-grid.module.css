@@ -1,0 +1,76 @@
+.container {
+  position: relative;
+  width: min(100%, 900px);
+  height: min(65vh, 560px);
+}
+
+.item {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  transition: top 1s ease, left 1s ease, opacity 5s linear;
+  width: clamp(48px, 6vw, 84px);
+  height: clamp(48px, 6vw, 84px);
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 16px;
+  padding: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.item.fadeout {
+  opacity: 0;
+}
+
+.icon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* Tramo "orbit": dos capas — el contenedor gira alrededor del centro, la
+   capa interior contra-gira a la misma velocidad para que el ícono quede
+   siempre en pie en vez de dar vueltas sobre sí mismo. */
+.orbitWrapper {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  animation-name: memoriza-orbit-spin;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.orbitInner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: clamp(48px, 6vw, 84px);
+  height: clamp(48px, 6vw, 84px);
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  transform: translate(-50%, -50%) translateX(clamp(90px, 28vw, 200px));
+  animation-name: memoriza-orbit-counter-spin;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes memoriza-orbit-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes memoriza-orbit-counter-spin {
+  from {
+    transform: translate(-50%, -50%) translateX(clamp(90px, 28vw, 200px)) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) translateX(clamp(90px, 28vw, 200px)) rotate(-360deg);
+  }
+}

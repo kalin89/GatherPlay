@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRoomState, type RoomActions, type UseRoomStateResult } from "@/hooks/use-room-state";
 import { buildJoinUrl } from "@/lib/join-url";
 import { getGameLabel } from "@/lib/game-catalog";
+import { startBackgroundMusic, stopBackgroundMusic } from "@/lib/game-sounds";
 import type { GameId, RoomState } from "@/lib/room-types";
 import type { TriviaMatchView } from "@/lib/trivia-match";
 import type { GestosMatchView } from "@/lib/gestos-match";
 import type { AdivinaPalabraView } from "@/lib/adivina-palabra-match";
 import type { LaRocolaView } from "@/lib/la-rocola-match";
+import type { MemorizaObjetosView } from "@/lib/memoriza-objetos-match";
 import { RoomCode } from "@/components/room-code";
 import { JoinQr } from "@/components/join-qr";
 import { TeamManager } from "./team-manager";
@@ -18,6 +20,7 @@ import { ScreenTrivia } from "./screen-trivia";
 import { ScreenGestos } from "./screen-gestos";
 import { ScreenAdivinaPalabra } from "./screen-adivina-palabra";
 import { ScreenLaRocola } from "./screen-la-rocola";
+import { ScreenMemorizaObjetos } from "./screen-memoriza-objetos";
 import styles from "./screen-lobby.module.css";
 
 // Único lugar que conoce qué juegos tienen de verdad una pantalla propia
@@ -34,6 +37,7 @@ function renderGameScreen(
   laRocolaAudio: UseRoomStateResult["laRocolaAudio"],
   rocolaArtists: string[] | null,
   actionError: { message: string } | null,
+  memorizaObjetos: MemorizaObjetosView,
 ): ReactNode {
   switch (gameId) {
     case "trivia":
@@ -52,6 +56,10 @@ function renderGameScreen(
           rocolaArtists={rocolaArtists}
           actionError={actionError}
         />
+      );
+    case "memoriza-objetos":
+      return (
+        <ScreenMemorizaObjetos state={state} actions={actions} memorizaObjetos={memorizaObjetos} />
       );
     default:
       return (
@@ -75,6 +83,7 @@ export function ScreenLobby({ roomCode }: { roomCode: string }) {
     laRocola,
     laRocolaAudio,
     rocolaArtists,
+    memorizaObjetos,
   } = useRoomState(roomCode);
   const [hasCheckedInitialReveal, setHasCheckedInitialReveal] = useState(false);
   const [revealed, setRevealed] = useState(false);
@@ -91,6 +100,18 @@ export function ScreenLobby({ roomCode }: { roomCode: string }) {
       setRevealed(true);
     }
   }
+
+  const currentGame = state?.currentGame ?? null;
+  useEffect(() => {
+    // Música de fondo mientras se juega — salvo en La Rocola, donde hay que
+    // escuchar la canción que se está adivinando.
+    if (currentGame !== null && currentGame !== "la-rocola") {
+      startBackgroundMusic();
+    } else {
+      stopBackgroundMusic();
+    }
+    return () => stopBackgroundMusic();
+  }, [currentGame]);
 
   if (error) {
     return (
@@ -123,6 +144,7 @@ export function ScreenLobby({ roomCode }: { roomCode: string }) {
       laRocolaAudio,
       rocolaArtists,
       actionError,
+      memorizaObjetos,
     );
   }
 

@@ -29,6 +29,12 @@ import {
   subscribeToLaRocola,
   type LaRocolaView,
 } from "@/lib/la-rocola-match";
+import {
+  initialMemorizaObjetosMatchView,
+  memorizaObjetosReducer,
+  subscribeToMemorizaObjetos,
+  type MemorizaObjetosView,
+} from "@/lib/memoriza-objetos-match";
 
 interface RoomError {
   message: string;
@@ -60,6 +66,7 @@ export interface UseJoinRoomResult {
    * botón "Listo" o el mensaje de espera. */
   adivinaPalabra: AdivinaPalabraView;
   laRocola: LaRocolaView;
+  memorizaObjetos: MemorizaObjetosView;
   join: (name: string) => void;
   submitAnswer: (opcionIndex: number) => void;
   startGestosTurn: () => void;
@@ -70,6 +77,9 @@ export interface UseJoinRoomResult {
   markRocolaReady: () => void;
   rocolaBuzz: () => void;
   submitRocolaAnswer: (texto: string) => void;
+  markMemorizaReady: () => void;
+  submitMemorizaGuess: (texto: string) => void;
+  passMemorizaTurn: () => void;
 }
 
 // Une al jugador a una sala (vía `join_room`) y mantiene el mismo socket
@@ -96,6 +106,10 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
     initialAdivinaPalabraMatchView,
   );
   const [laRocola, dispatchLaRocola] = useReducer(laRocolaReducer, initialLaRocolaMatchView);
+  const [memorizaObjetos, dispatchMemorizaObjetos] = useReducer(
+    memorizaObjetosReducer,
+    initialMemorizaObjetosMatchView,
+  );
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
@@ -124,6 +138,7 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
       subscribeToGestos(socket, dispatchGestos);
       subscribeToAdivinaPalabra(socket, dispatchAdivinaPalabra);
       subscribeToLaRocola(socket, dispatchLaRocola);
+      subscribeToMemorizaObjetos(socket, dispatchMemorizaObjetos);
       let hasJoined = false;
 
       socket.on("connect", () => {
@@ -149,6 +164,7 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
           dispatchGestos({ type: "reset" });
           dispatchAdivinaPalabra({ type: "reset" });
           dispatchLaRocola({ type: "reset" });
+          dispatchMemorizaObjetos({ type: "reset" });
         }
       });
 
@@ -222,6 +238,21 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
     [roomCode],
   );
 
+  const markMemorizaReady = useCallback(() => {
+    socketRef.current?.emit("memoriza_ready", { code: roomCode.toUpperCase() });
+  }, [roomCode]);
+
+  const submitMemorizaGuess = useCallback(
+    (texto: string) => {
+      socketRef.current?.emit("memoriza_submit_guess", { code: roomCode.toUpperCase(), texto });
+    },
+    [roomCode],
+  );
+
+  const passMemorizaTurn = useCallback(() => {
+    socketRef.current?.emit("memoriza_pass", { code: roomCode.toUpperCase() });
+  }, [roomCode]);
+
   return {
     status,
     state,
@@ -232,6 +263,7 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
     gestos,
     adivinaPalabra,
     laRocola,
+    memorizaObjetos,
     join,
     submitAnswer,
     startGestosTurn,
@@ -242,5 +274,8 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
     markRocolaReady,
     rocolaBuzz,
     submitRocolaAnswer,
+    markMemorizaReady,
+    submitMemorizaGuess,
+    passMemorizaTurn,
   };
 }

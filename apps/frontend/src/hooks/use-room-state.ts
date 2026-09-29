@@ -34,6 +34,12 @@ import type {
   RocolaAudioControlPayload,
   RocolaFiltro,
 } from "@/lib/la-rocola-types";
+import {
+  initialMemorizaObjetosMatchView,
+  memorizaObjetosReducer,
+  subscribeToMemorizaObjetos,
+  type MemorizaObjetosView,
+} from "@/lib/memoriza-objetos-match";
 
 interface RoomError {
   message: string;
@@ -50,6 +56,7 @@ export interface RoomActions {
   startAdivinaPalabraGame: () => void;
   startLaRocolaGame: (filtro?: RocolaFiltro) => void;
   getRocolaArtists: () => void;
+  startMemorizaObjetosGame: () => void;
 }
 
 export interface UseRoomStateResult {
@@ -81,6 +88,7 @@ export interface UseRoomStateResult {
   /** Nombres de artista del banco de La Rocola, para el selector de filtro
    * del host — `null` mientras no llegó la respuesta de `rocola_get_artists`. */
   rocolaArtists: string[] | null;
+  memorizaObjetos: MemorizaObjetosView;
 }
 
 // Se suscribe a una sala como espectador (vía `watch_room`, sin registrarse
@@ -109,6 +117,10 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
   const [laRocola, dispatchLaRocola] = useReducer(laRocolaReducer, initialLaRocolaMatchView);
   const [laRocolaAudio, setLaRocolaAudio] = useState<UseRoomStateResult["laRocolaAudio"]>(null);
   const [rocolaArtists, setRocolaArtists] = useState<string[] | null>(null);
+  const [memorizaObjetos, dispatchMemorizaObjetos] = useReducer(
+    memorizaObjetosReducer,
+    initialMemorizaObjetosMatchView,
+  );
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
@@ -119,6 +131,7 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
     const unsubscribeGestos = subscribeToGestos(socket, dispatchGestos);
     const unsubscribeAdivinaPalabra = subscribeToAdivinaPalabra(socket, dispatchAdivinaPalabra);
     const unsubscribeLaRocola = subscribeToLaRocola(socket, dispatchLaRocola);
+    const unsubscribeMemorizaObjetos = subscribeToMemorizaObjetos(socket, dispatchMemorizaObjetos);
     const onRocolaAudio = (payload: RocolaAudioControlPayload) =>
       setLaRocolaAudio({ ...payload, nonce: Math.random() });
     socket.on("rocola_audio_control", onRocolaAudio);
@@ -144,6 +157,7 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
         dispatchAdivinaPalabra({ type: "reset" });
         dispatchLaRocola({ type: "reset" });
         setLaRocolaAudio(null);
+        dispatchMemorizaObjetos({ type: "reset" });
       }
     });
 
@@ -161,6 +175,7 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
       unsubscribeGestos();
       unsubscribeAdivinaPalabra();
       unsubscribeLaRocola();
+      unsubscribeMemorizaObjetos();
       socket.off("rocola_audio_control", onRocolaAudio);
       socket.off("rocola_artists", onRocolaArtists);
       socket.disconnect();
@@ -223,6 +238,10 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
     socketRef.current?.emit("rocola_get_artists", { code: roomCode });
   }, [roomCode]);
 
+  const startMemorizaObjetosGame = useCallback(() => {
+    socketRef.current?.emit("start_memoriza_objetos_game", { code: roomCode });
+  }, [roomCode]);
+
   return {
     state,
     error,
@@ -234,6 +253,7 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
     laRocola,
     laRocolaAudio,
     rocolaArtists,
+    memorizaObjetos,
     actions: {
       createTeam,
       removeTeam,
@@ -245,6 +265,7 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
       startAdivinaPalabraGame,
       startLaRocolaGame,
       getRocolaArtists,
+      startMemorizaObjetosGame,
     },
   };
 }

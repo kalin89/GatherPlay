@@ -560,4 +560,90 @@ describe("useJoinRoom", () => {
       expect(result.current.laRocola).toEqual({ phase: "idle" });
     });
   });
+
+  it("markMemorizaReady emite memoriza_ready con el código en mayúsculas", () => {
+    const { result } = renderHook(() => useJoinRoom("abcde"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() => result.current.markMemorizaReady());
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "memoriza_ready",
+      payload: { code: "ABCDE" },
+    });
+  });
+
+  it("submitMemorizaGuess emite memoriza_submit_guess con el código en mayúsculas y el texto", () => {
+    const { result } = renderHook(() => useJoinRoom("abcde"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() => result.current.submitMemorizaGuess("manzana"));
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "memoriza_submit_guess",
+      payload: { code: "ABCDE", texto: "manzana" },
+    });
+  });
+
+  it("passMemorizaTurn emite memoriza_pass con el código en mayúsculas", () => {
+    const { result } = renderHook(() => useJoinRoom("abcde"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() => result.current.passMemorizaTurn());
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "memoriza_pass",
+      payload: { code: "ABCDE" },
+    });
+  });
+
+  it("los eventos de Memoriza los objetos actualizan `memorizaObjetos` vía el reducer compartido", async () => {
+    const { result } = renderHook(() => useJoinRoom("ABCDE"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+
+    act(() =>
+      lastSocket?.trigger("memoriza_waiting_ready", {
+        code: "ABCDE",
+        readyPlayerIds: [],
+        eligiblePlayerIds: ["p1", "p2"],
+        items: [{ id: "obj-1", imagenUrl: "https://example.com/1.svg" }],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.memorizaObjetos).toEqual({
+        phase: "waiting_ready",
+        readyPlayerIds: [],
+        eligiblePlayerIds: ["p1", "p2"],
+        items: [{ id: "obj-1", imagenUrl: "https://example.com/1.svg" }],
+      });
+    });
+  });
+
+  it("un room_state con currentGame: null resetea `memorizaObjetos` a idle", async () => {
+    const { result } = renderHook(() => useJoinRoom("ABCDE"));
+
+    act(() => result.current.join("Ana"));
+    lastSocket?.triggerConnect();
+    act(() =>
+      lastSocket?.trigger("memoriza_waiting_ready", {
+        code: "ABCDE",
+        readyPlayerIds: [],
+        eligiblePlayerIds: ["p1"],
+        items: [],
+      }),
+    );
+    await waitFor(() => expect(result.current.memorizaObjetos.phase).toBe("waiting_ready"));
+
+    act(() => lastSocket?.triggerRoomState(makeRoom({ currentGame: null })));
+
+    await waitFor(() => {
+      expect(result.current.memorizaObjetos).toEqual({ phase: "idle" });
+    });
+  });
 });

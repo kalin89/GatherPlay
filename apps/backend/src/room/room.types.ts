@@ -19,7 +19,13 @@ export interface RoundState {
   remainingSeconds: number;
 }
 
-export const GAME_IDS = ['trivia', 'caras-y-gestos', 'adivina-palabra', 'la-rocola'] as const;
+export const GAME_IDS = [
+  'trivia',
+  'caras-y-gestos',
+  'adivina-palabra',
+  'la-rocola',
+  'memoriza-objetos',
+] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
 export interface RoomState {

@@ -407,6 +407,61 @@ describe("useRoomState", () => {
     });
   });
 
+  it("startMemorizaObjetosGame emite start_memoriza_objetos_game con el código de sala", () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    act(() => result.current.actions.startMemorizaObjetosGame());
+
+    expect(lastSocket?.emitted).toContainEqual({
+      event: "start_memoriza_objetos_game",
+      payload: { code: "ABCDE" },
+    });
+  });
+
+  it("los eventos de Memoriza los objetos actualizan `memorizaObjetos` vía el reducer compartido", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    expect(result.current.memorizaObjetos).toEqual({ phase: "idle" });
+
+    act(() =>
+      lastSocket?.trigger("memoriza_waiting_ready", {
+        code: "ABCDE",
+        readyPlayerIds: ["p1"],
+        eligiblePlayerIds: ["p1", "p2"],
+        items: [{ id: "obj-1", imagenUrl: "https://example.com/1.svg" }],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.memorizaObjetos).toEqual({
+        phase: "waiting_ready",
+        readyPlayerIds: ["p1"],
+        eligiblePlayerIds: ["p1", "p2"],
+        items: [{ id: "obj-1", imagenUrl: "https://example.com/1.svg" }],
+      });
+    });
+  });
+
+  it("un room_state con currentGame: null resetea `memorizaObjetos` a idle", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    act(() =>
+      lastSocket?.trigger("memoriza_waiting_ready", {
+        code: "ABCDE",
+        readyPlayerIds: [],
+        eligiblePlayerIds: ["p1"],
+        items: [],
+      }),
+    );
+    await waitFor(() => expect(result.current.memorizaObjetos.phase).toBe("waiting_ready"));
+
+    act(() => lastSocket?.triggerRoomState(makeRoom({ currentGame: null })));
+
+    await waitFor(() => {
+      expect(result.current.memorizaObjetos).toEqual({ phase: "idle" });
+    });
+  });
+
   it("un error después de tener state cargado va a actionError, no a error", async () => {
     const { result } = renderHook(() => useRoomState("ABCDE"));
 
