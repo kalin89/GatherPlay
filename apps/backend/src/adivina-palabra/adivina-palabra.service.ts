@@ -1,6 +1,7 @@
 import { Injectable, OnModuleDestroy, Optional } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { RoomService } from '../room/room.service.js';
+import type { RoomScopedState } from '../room/room-scoped-state.js';
 import { screenRoomName } from '../room/room.gateway.js';
 import { GameEngineService } from '../game-engine/game-engine.service.js';
 import { AiContentService } from '../ai-content/ai-content.service.js';
@@ -108,7 +109,7 @@ const MAX_REFILL_ATTEMPTS = 3;
 // "Listo" cuando quiera, sin setTimeout de servidor. Ver
 // specs/features/adivina-palabra-module/analysis.md.
 @Injectable()
-export class AdivinaPalabraService implements OnModuleDestroy {
+export class AdivinaPalabraService implements OnModuleDestroy, RoomScopedState {
   private readonly matches = new Map<string, AdivinaMatchState>();
   // Palabras de cada sala entre partidas — en memoria, se pierde si se
   // reinicia el backend. Sobrevive a cada partida individual (no se borra en
@@ -129,7 +130,18 @@ export class AdivinaPalabraService implements OnModuleDestroy {
     ) => {
       setTimeout(callback, ms);
     },
-  ) {}
+  ) {
+    rooms.registerRoomScoped(this);
+  }
+
+  // Libera todo el estado de la sala cuando `RoomService.closeRoom` la cierra:
+  // detiene el temporizador de la partida en curso y borra tanto la partida
+  // como el acumulador por sala. Idempotente.
+  disposeRoom(code: string): void {
+    this.matches.get(code)?.timer?.stop();
+    this.matches.delete(code);
+    this.roomWords.delete(code);
+  }
 
   onModuleDestroy(): void {
     for (const match of this.matches.values()) {
@@ -148,6 +160,8 @@ export class AdivinaPalabraService implements OnModuleDestroy {
     const wordsNeeded = WORDS_PER_TURN_ESTIMATE * turns.length;
 
     await this.ensureWordSupply(code, wordsNeeded);
+    // La sala pudo cerrarse mientras se esperaba a la IA: no resucitar estado.
+    if (this.rooms.getRoom(code) === undefined) return;
     const queue = this.drawFromPool(code, wordsNeeded);
 
     room.status = 'jugando';

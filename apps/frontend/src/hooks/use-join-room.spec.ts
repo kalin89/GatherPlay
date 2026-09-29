@@ -646,4 +646,41 @@ describe("useJoinRoom", () => {
       expect(result.current.memorizaObjetos).toEqual({ phase: "idle" });
     });
   });
+
+  describe("ciclo de vida de la sala", () => {
+    function joinAs(result: { current: ReturnType<typeof useJoinRoom> }) {
+      act(() => result.current.join("Ana"));
+      lastSocket?.triggerConnect();
+      act(() => lastSocket?.triggerRoomState(makeRoom()));
+    }
+
+    it("arranca con el anfitrión conectado y la sala abierta", () => {
+      const { result } = renderHook(() => useJoinRoom("ABCDE"));
+
+      expect(result.current.hostConnected).toBe(true);
+      expect(result.current.closedReason).toBeNull();
+    });
+
+    it("host_disconnected marca al anfitrión como desconectado y host_reconnected lo revierte", async () => {
+      const { result } = renderHook(() => useJoinRoom("ABCDE"));
+      joinAs(result);
+
+      act(() => lastSocket?.trigger("host_disconnected"));
+      await waitFor(() => expect(result.current.hostConnected).toBe(false));
+      expect(result.current.status).toBe("joined");
+
+      act(() => lastSocket?.trigger("host_reconnected"));
+      await waitFor(() => expect(result.current.hostConnected).toBe(true));
+    });
+
+    it("room_closed guarda el motivo y desconecta el socket para no reintentar", async () => {
+      const { result } = renderHook(() => useJoinRoom("ABCDE"));
+      joinAs(result);
+
+      act(() => lastSocket?.trigger("room_closed", { reason: "host_left" }));
+
+      await waitFor(() => expect(result.current.closedReason).toBe("host_left"));
+      expect(lastSocket?.disconnected).toBe(true);
+    });
+  });
 });

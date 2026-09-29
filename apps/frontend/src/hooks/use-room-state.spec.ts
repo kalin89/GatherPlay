@@ -477,4 +477,21 @@ describe("useRoomState", () => {
       expect(result.current.state).not.toBeNull();
     });
   });
+
+  it("arranca con la sala abierta (closedReason null)", () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+
+    expect(result.current.closedReason).toBeNull();
+  });
+
+  it("room_closed guarda el motivo y desconecta el socket para no reintentar", async () => {
+    const { result } = renderHook(() => useRoomState("ABCDE"));
+    act(() => lastSocket?.triggerConnect());
+    act(() => lastSocket?.triggerRoomState(makeRoom()));
+
+    act(() => lastSocket?.trigger("room_closed", { reason: "max_age" }));
+
+    await waitFor(() => expect(result.current.closedReason).toBe("max_age"));
+    expect(lastSocket?.disconnected).toBe(true);
+  });
 });

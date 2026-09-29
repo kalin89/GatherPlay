@@ -1,6 +1,7 @@
 import { Injectable, OnModuleDestroy, Optional } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { RoomService } from '../room/room.service.js';
+import type { RoomScopedState } from '../room/room-scoped-state.js';
 import { GameEngineService } from '../game-engine/game-engine.service.js';
 import { NotEnoughTeamsError } from '../game-engine/turn-distribution.js';
 import { ReadyGate } from '../game-engine/ready-gate.js';
@@ -119,7 +120,7 @@ function buildPista(palabra: string, letraIndex: number): string {
 // que le quedaba a ese equipo, no siempre TEAM_CLOCK_SECONDS. Ver
 // specs/features/memoriza-objetos-module/analysis.md.
 @Injectable()
-export class MemorizaObjetosService implements OnModuleDestroy {
+export class MemorizaObjetosService implements OnModuleDestroy, RoomScopedState {
   private readonly matches = new Map<string, MemorizaMatchState>();
   // Objetos ya mostrados por sala — sobrevive entre partidas, mismo límite ya
   // documentado de "no hay limpieza de salas todavía".
@@ -136,7 +137,18 @@ export class MemorizaObjetosService implements OnModuleDestroy {
     private readonly scheduler: (callback: () => void, ms: number) => void = (callback, ms) => {
       setTimeout(callback, ms);
     },
-  ) {}
+  ) {
+    rooms.registerRoomScoped(this);
+  }
+
+  // Libera todo el estado de la sala cuando `RoomService.closeRoom` la cierra:
+  // detiene el temporizador de la partida en curso y borra tanto la partida
+  // como el acumulador por sala. Idempotente.
+  disposeRoom(code: string): void {
+    this.matches.get(code)?.timer?.stop();
+    this.matches.delete(code);
+    this.roomUsedObjects.delete(code);
+  }
 
   onModuleDestroy(): void {
     for (const match of this.matches.values()) {

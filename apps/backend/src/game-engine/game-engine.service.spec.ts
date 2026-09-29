@@ -221,4 +221,18 @@ describe('GameEngineService', () => {
 
     expect(events).toEqual([]);
   });
+
+  it('disposeRoom (cierre de sala) detiene la ronda en curso y es idempotente', () => {
+    const room = createRoomWithPlayerAndTeams(rooms);
+    service.startRound(room.code, 10);
+    const events: GameEngineEvent[] = [];
+    service.events$.subscribe((e) => events.push(e));
+
+    rooms.closeRoom(room.code);
+    service.disposeRoom(room.code);
+    vi.advanceTimersByTime(15000);
+
+    expect(events).toEqual([]);
+    expect(() => service.endRound(room.code)).toThrow();
+  });
 });

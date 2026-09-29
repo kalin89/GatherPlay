@@ -36,6 +36,23 @@ Criterios del motor de sala (Fase 1 de tasks.md): crear sala, generar código, u
 - **Given** dos jugadores uniéndose a la misma sala al mismo tiempo, **when** ambos envían su solicitud de unión, **then** ambos quedan registrados sin pisarse entre sí (sin condición de carrera que pierda a uno de los dos).
 - **Given** un jugador conectado a una sala, **when** pierde la conexión (cierra la pestaña o se corta el WebSocket), **then** se remueve de la lista de jugadores y el resto de los clientes ven la lista actualizada. (Reconexión con el mismo código sin perder el lugar es Fase 4 — fuera de esta tarea.)
 
+### Ciclo de vida de la sala
+
+Ver `specs/features/room-lifecycle/analysis.md`. El host es la pantalla que se suscribe con `watch_room`; los jugadores no cuentan para mantener viva la sala.
+
+- **Given** una sala sin ninguna pantalla de host conectada (nunca se abrió, o se cerró), **when** pasa `ROOM_HOST_GRACE_MS` (2 min por defecto), **then** la sala se cierra: sus jugadores reciben `room_closed { reason: 'host_left' }`, salen del canal de la sala y un `join_room` posterior con ese código devuelve error.
+- **Given** una sala con jugadores y un host que se desconecta, **when** el host se desconecta, **then** los demás clientes reciben `host_disconnected`.
+- **Given** un host desconectado dentro de la gracia, **when** una pantalla vuelve a hacer `watch_room` con el mismo código, **then** los demás clientes reciben `host_reconnected` y la sala no se cierra.
+- **Given** una sala con más de `ROOM_MAX_AGE_MS` (12 h por defecto), **when** corre el barrido, **then** se cierra aunque haya un host conectado, con `reason: 'max_age'`.
+- **Given** `MAX_ROOMS` salas activas, **when** se intenta crear otra, **then** el cliente recibe `error` y no se crea.
+- **Given** una sala que se cierra con una partida en curso, **then** todos los temporizadores y el estado de esa sala (partida y contenido ya usado) se liberan, y si la partida esperaba a la IA o al catálogo, al llegar la respuesta no se emite nada ni se recrea estado.
+
+Interfaz (ver `specs/features/room-lifecycle-ui/analysis.md`):
+
+- **Given** un jugador unido a una sala, **when** recibe `host_disconnected`, **then** ve un aviso "El anfitrión perdió la conexión" sobre la vista actual (lobby o juego), sin perder esa vista; **when** recibe `host_reconnected`, **then** el aviso desaparece.
+- **Given** un jugador o una pantalla conectados, **when** reciben `room_closed`, **then** la vista se reemplaza por un aviso con el motivo (`host_left` o `max_age`) y un enlace para volver al inicio, y el cliente se desconecta sin reintentar unirse.
+- **Given** la pantalla con la música de fondo sonando, **when** la sala se cierra, **then** la música se detiene.
+
 ### Armado de equipos
 
 - **Given** una sala en `lobby`, **when** el host crea un equipo con nombre y color, **then** el equipo se agrega a la sala sin jugadores y todos los clientes conectados reciben el estado actualizado.

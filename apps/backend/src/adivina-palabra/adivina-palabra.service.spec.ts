@@ -8,6 +8,7 @@ import type { WordGenerator } from '../ai-content/word-generator.js';
 import {
   AdivinaPalabraService,
   AdivinaMatchAlreadyRunningError,
+  NoAdivinaMatchError,
   NotYourTurnError,
   PassLimitReachedError,
   TurnAlreadyStartedError,
@@ -415,5 +416,71 @@ describe('AdivinaPalabraService', () => {
 
     const repetidas = mostradasSegundaPartida.filter((p) => mostradasPrimeraPartida.includes(p));
     expect(repetidas).toHaveLength(0);
+  });
+
+  describe('cierre de sala (RoomService.closeRoom)', () => {
+    it('detiene el turno en curso: avanzar el reloj ya no emite nada y no hay partida', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const adivina = createAdivinaPalabra();
+      const events: AdivinaPalabraEvent[] = [];
+      adivina.events$.subscribe((e) => events.push(e));
+      await adivina.startMatch(setup.room.code);
+      const current = currentTurnPlayer(events, setup);
+      adivina.markReady(setup.room.code, current.socketId);
+      const eventsBeforeClose = events.length;
+
+      rooms.closeRoom(setup.room.code);
+      await vi.advanceTimersByTimeAsync(ADIVINA_TURN_SECONDS * 1000 * 2);
+
+      expect(events).toHaveLength(eventsBeforeClose);
+      expect(() => adivina.markGuessed(setup.room.code, current.socketId)).toThrow(
+        NoAdivinaMatchError,
+      );
+    });
+
+    it('si la sala se cierra mientras la IA responde, no lanza ni resucita estado', async () => {
+      // Reloj real: hay que esperar un turno del event loop para que Node
+      // dispare `unhandledRejection`, y `setImmediate` está falseado.
+      vi.useRealTimers();
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      let release!: (palabras: string[]) => void;
+      const pending = new Promise<string[]>((resolve) => {
+        release = resolve;
+      });
+      const aiContent = new AiContentService(null, Math.random, null, {
+        generate: vi.fn(() => pending),
+      });
+      const adivina = new AdivinaPalabraService(rooms, gameEngine, aiContent);
+      const events: AdivinaPalabraEvent[] = [];
+      adivina.events$.subscribe((e) => events.push(e));
+      const unhandled = vi.fn();
+      process.once('unhandledRejection', unhandled);
+
+      const started = adivina.startMatch(setup.room.code);
+      rooms.closeRoom(setup.room.code);
+      release(Array.from({ length: 60 }, (_, i) => `Palabra${i}`));
+      await expect(started).resolves.toBeUndefined();
+      await new Promise((resolve) => setImmediate(resolve));
+      process.off('unhandledRejection', unhandled);
+
+      expect(unhandled).not.toHaveBeenCalled();
+      expect(turnWaitingEvents(events)).toHaveLength(0);
+      const internals = adivina as unknown as {
+        matches: Map<string, unknown>;
+        roomWords: Map<string, unknown>;
+      };
+      expect(internals.matches.size).toBe(0);
+      expect(internals.roomWords.size).toBe(0);
+    });
+
+    it('es idempotente y no falla si la sala nunca tuvo partida', () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const adivina = createAdivinaPalabra();
+
+      expect(() => {
+        adivina.disposeRoom(setup.room.code);
+        adivina.disposeRoom(setup.room.code);
+      }).not.toThrow();
+    });
   });
 });

@@ -1,6 +1,7 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { RoomService, TeamNotFoundError } from '../room/room.service.js';
+import type { RoomScopedState } from '../room/room-scoped-state.js';
 import type { RoomState } from '../room/room.types.js';
 import type { GameEngineEvent, TeamScore } from './game-engine.types.js';
 import { RoundTimer } from './round-timer.js';
@@ -27,13 +28,21 @@ export class InvalidRoundDurationError extends Error {
 }
 
 @Injectable()
-export class GameEngineService implements OnModuleDestroy {
+export class GameEngineService implements OnModuleDestroy, RoomScopedState {
   private readonly timers = new Map<string, RoundTimer>();
   private readonly eventsSubject = new Subject<GameEngineEvent>();
   readonly events$: Observable<GameEngineEvent> =
     this.eventsSubject.asObservable();
 
-  constructor(private readonly rooms: RoomService) {}
+  constructor(private readonly rooms: RoomService) {
+    rooms.registerRoomScoped(this);
+  }
+
+  // Detiene la ronda en curso de una sala que `RoomService.closeRoom` cerró.
+  // Idempotente.
+  disposeRoom(code: string): void {
+    this.stopTimer(code);
+  }
 
   startRound(code: string, durationSeconds: number): RoomState {
     const room = this.rooms.getRoomOrThrow(code);

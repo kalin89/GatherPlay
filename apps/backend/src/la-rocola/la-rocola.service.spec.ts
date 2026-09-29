@@ -11,6 +11,7 @@ import {
   InsufficientFilteredSongsError,
   LaRocolaService,
   MatchAlreadyStartedError,
+  NoRocolaMatchError,
   NotEligibleToBuzzError,
   NotYourAnswerError,
   RocolaMatchAlreadyRunningError,
@@ -561,6 +562,79 @@ describe('LaRocolaService', () => {
       const laRocola = createLaRocolaWithContent(content);
 
       expect(laRocola.getAvailableArtists()).toEqual(content.getAvailableArtists());
+    });
+  });
+
+  describe('cierre de sala (RoomService.closeRoom)', () => {
+    it('detiene la ronda en curso: avanzar el reloj ya no emite nada y no hay partida', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+      const events: LaRocolaEvent[] = [];
+      laRocola.events$.subscribe((e) => events.push(e));
+      laRocola.startMatch(setup.room.code);
+      await readyBoth(laRocola, setup);
+      const eventsBeforeClose = events.length;
+
+      rooms.closeRoom(setup.room.code);
+      await vi.advanceTimersByTimeAsync((COUNTDOWN_SECONDS + SONG_SECONDS) * 1000 * 2);
+
+      expect(events).toHaveLength(eventsBeforeClose);
+      expect(() => laRocola.handleBuzz(setup.room.code, setup.teamA.socketId)).toThrow(
+        NoRocolaMatchError,
+      );
+    });
+
+    it('si la sala se cierra mientras se resuelve el catálogo, no lanza ni resucita estado', async () => {
+      // Reloj real: hay que esperar un turno del event loop para que Node
+      // dispare `unhandledRejection`, y `setImmediate` está falseado.
+      vi.useRealTimers();
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const provider: SongPreviewProvider = {
+        lookup: vi.fn(async (trackIds: number[]) => {
+          await gate;
+          return new Map(
+            trackIds.map((id) => [
+              id,
+              { previewUrl: `https://preview/${id}`, portadaUrl: `https://art/${id}` },
+            ]),
+          );
+        }),
+      };
+      const content = new RocolaContentService(provider, Math.random, makeBank(40), []);
+      const laRocola = createLaRocolaWithContent(content);
+      const events: LaRocolaEvent[] = [];
+      laRocola.events$.subscribe((e) => events.push(e));
+      const unhandled = vi.fn();
+      process.once('unhandledRejection', unhandled);
+
+      laRocola.startMatch(setup.room.code);
+      await laRocola.markReady(setup.room.code, setup.teamA.socketId);
+      const lastReady = laRocola.markReady(setup.room.code, setup.teamB.socketId);
+      rooms.closeRoom(setup.room.code);
+      release();
+      await expect(lastReady).resolves.toBeUndefined();
+      await new Promise((resolve) => setImmediate(resolve));
+      process.off('unhandledRejection', unhandled);
+
+      expect(unhandled).not.toHaveBeenCalled();
+      expect(eventsOfType(events, 'rocola_round_started')).toHaveLength(0);
+      expect(
+        (laRocola as unknown as { roomUsedSongs: Map<string, unknown> }).roomUsedSongs.size,
+      ).toBe(0);
+    });
+
+    it('es idempotente y no falla si la sala nunca tuvo partida', () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+
+      expect(() => {
+        laRocola.disposeRoom(setup.room.code);
+        laRocola.disposeRoom(setup.room.code);
+      }).not.toThrow();
     });
   });
 });

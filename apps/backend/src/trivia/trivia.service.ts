@@ -1,6 +1,7 @@
 import { Injectable, OnModuleDestroy, Optional } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { RoomService } from '../room/room.service.js';
+import type { RoomScopedState } from '../room/room-scoped-state.js';
 import { screenRoomName } from '../room/room.gateway.js';
 import { GameEngineService } from '../game-engine/game-engine.service.js';
 import { AiContentService } from '../ai-content/ai-content.service.js';
@@ -87,7 +88,7 @@ const MAX_TRACKED_QUESTIONS_PER_ROOM = 150;
 // GameEngineService.startRound/endRound (una partida son N turnos, no una
 // ronda), y solo reusa gameEngine.addScore.
 @Injectable()
-export class TriviaService implements OnModuleDestroy {
+export class TriviaService implements OnModuleDestroy, RoomScopedState {
   private readonly matches = new Map<string, TriviaMatchState>();
   // Preguntas ya usadas en cada sala, entre partidas — en memoria, se pierde
   // si se reinicia el backend (la memoria persistente entre reinicios es la
@@ -107,7 +108,18 @@ export class TriviaService implements OnModuleDestroy {
     ) => {
       setTimeout(callback, ms);
     },
-  ) {}
+  ) {
+    rooms.registerRoomScoped(this);
+  }
+
+  // Libera todo el estado de la sala cuando `RoomService.closeRoom` la cierra:
+  // detiene el temporizador de la partida en curso y borra tanto la partida
+  // como el acumulador por sala. Idempotente.
+  disposeRoom(code: string): void {
+    this.matches.get(code)?.timer?.stop();
+    this.matches.delete(code);
+    this.askedQuestions.delete(code);
+  }
 
   onModuleDestroy(): void {
     for (const match of this.matches.values()) {
@@ -181,6 +193,8 @@ export class TriviaService implements OnModuleDestroy {
 
     const excluir = this.askedQuestions.get(code) ?? [];
     const preguntas = await this.aiContent.getTriviaQuestions(DEFAULT_CATEGORY, count, excluir);
+    // La sala pudo cerrarse mientras se esperaba a la IA: no resucitar estado.
+    if (this.matches.get(code) !== match) return;
     match.questions = preguntas.map((p) => ({
       pregunta: p.pregunta,
       opciones: p.opciones,

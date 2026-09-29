@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
 import { createSocket } from "@/lib/socket";
-import type { GameId, RoomState } from "@/lib/room-types";
+import type { GameId, RoomClosedReason, RoomState } from "@/lib/room-types";
 import {
   initialTriviaMatchView,
   subscribeToTrivia,
@@ -68,6 +68,9 @@ export interface UseRoomStateResult {
    * informativo, no fatal. */
   actionError: RoomError | null;
   connecting: boolean;
+  /** Motivo de cierre de la sala (`room_closed`), o null si sigue abierta.
+   * Al recibirlo el hook desconecta el socket: la sala ya no existe. */
+  closedReason: RoomClosedReason | null;
   /** Comandos de host — el mismo socket que se suscribió con `watch_room`
    * se reutiliza para emitirlos, así no hace falta abrir una segunda
    * conexión solo para mandar acciones. */
@@ -105,6 +108,7 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
   const [error, setError] = useState<RoomError | null>(null);
   const [actionError, setActionError] = useState<RoomError | null>(null);
   const [connecting, setConnecting] = useState(true);
+  const [closedReason, setClosedReason] = useState<RoomClosedReason | null>(null);
   const [trivia, dispatchTrivia] = useReducer(triviaReducer, initialTriviaMatchView);
   const [gestos, dispatchGestos] = useReducer(
     (state: GestosMatchView, action: GestosAction) => gestosReducer(state, action, null),
@@ -159,6 +163,13 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
         setLaRocolaAudio(null);
         dispatchMemorizaObjetos({ type: "reset" });
       }
+    });
+
+    socket.on("room_closed", (payload: { reason: RoomClosedReason }) => {
+      setClosedReason(payload.reason);
+      // La sala ya no existe: sin esto socket.io reintentaría conectar y el
+      // `connect` de arriba volvería a emitir `watch_room` en vano.
+      socket.disconnect();
     });
 
     socket.on("error", (payload: RoomError) => {
@@ -247,6 +258,7 @@ export function useRoomState(roomCode: string): UseRoomStateResult {
     error,
     actionError,
     connecting,
+    closedReason,
     trivia,
     gestos,
     adivinaPalabra,

@@ -1,5 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import {
+  DEFAULT_ROOM_LIFECYCLE_CONFIG,
+  ROOM_LIFECYCLE_CONFIG,
+  type RoomLifecycleConfig,
+} from './room-lifecycle.config.js';
+import type { RoomScopedState } from './room-scoped-state.js';
 import { GAME_IDS, type GameId, type Player, type RoomState, type Team } from './room.types.js';
 
 // Sin 0/O ni 1/I — se leen y se dictan en voz alta entre celular y pantalla.
@@ -48,11 +54,59 @@ export class UnknownGameError extends Error {
   }
 }
 
+export class TooManyRoomsError extends Error {
+  constructor(maxRooms: number) {
+    super(`Se alcanzó el máximo de ${maxRooms} salas simultáneas, intenta más tarde`);
+    this.name = 'TooManyRoomsError';
+  }
+}
+
+export type RoomCloseReason = 'host_left' | 'max_age';
+
+// Datos de ciclo de vida de una sala. Viven aparte de `RoomState` a propósito:
+// `RoomState` se serializa y se difunde a los clientes, esto es interno.
+interface RoomMeta {
+  createdAt: number;
+  // Sockets de pantalla (los que hacen `watch_room`), no de jugadores.
+  hostSocketIds: Set<string>;
+  // Desde cuándo no hay ninguna pantalla conectada; null si hay al menos una.
+  hostlessSince: number | null;
+  // Hubo un host y se perdió — distingue una reconexión de la primera conexión.
+  hostLost: boolean;
+}
+
 @Injectable()
 export class RoomService {
   private readonly rooms = new Map<string, RoomState>();
+  private readonly roomMeta = new Map<string, RoomMeta>();
+  private readonly hostSocketToRoom = new Map<string, string>();
+  private readonly roomScoped: RoomScopedState[] = [];
 
-  createRoom(): RoomState {
+  constructor(
+    @Optional()
+    @Inject(ROOM_LIFECYCLE_CONFIG)
+    private readonly config: RoomLifecycleConfig = DEFAULT_ROOM_LIFECYCLE_CONFIG,
+  ) {}
+
+  get lifecycleConfig(): RoomLifecycleConfig {
+    return this.config;
+  }
+
+  // Cada servicio con estado por sala se registra a sí mismo en su constructor,
+  // así `closeRoom` puede limpiarlos sin que RoomModule los importe (evita una
+  // dependencia circular).
+  registerRoomScoped(service: RoomScopedState): void {
+    this.roomScoped.push(service);
+  }
+
+  getStats(): { rooms: number } {
+    return { rooms: this.rooms.size };
+  }
+
+  createRoom(now: number = Date.now()): RoomState {
+    if (this.rooms.size >= this.config.maxRooms) {
+      throw new TooManyRoomsError(this.config.maxRooms);
+    }
     const code = this.generateUniqueCode();
     const room: RoomState = {
       code,
@@ -63,7 +117,92 @@ export class RoomService {
       currentGame: null,
     };
     this.rooms.set(code, room);
+    this.roomMeta.set(code, {
+      createdAt: now,
+      hostSocketIds: new Set(),
+      hostlessSince: now,
+      hostLost: false,
+    });
     return room;
+  }
+
+  attachHost(
+    code: string,
+    socketId: string,
+    now: number = Date.now(),
+  ): { reconnected: boolean } {
+    const meta = this.roomMeta.get(code);
+    if (!meta) {
+      throw new RoomNotFoundError(code);
+    }
+    const previousCode = this.hostSocketToRoom.get(socketId);
+    if (previousCode !== undefined && previousCode !== code) {
+      this.detachHost(socketId, now);
+    }
+    const reconnected = meta.hostLost;
+    meta.hostSocketIds.add(socketId);
+    meta.hostlessSince = null;
+    meta.hostLost = false;
+    this.hostSocketToRoom.set(socketId, code);
+    return { reconnected };
+  }
+
+  detachHost(
+    socketId: string,
+    now: number = Date.now(),
+  ): { code: string; hostless: boolean } | undefined {
+    const code = this.hostSocketToRoom.get(socketId);
+    if (code === undefined) {
+      return undefined;
+    }
+    this.hostSocketToRoom.delete(socketId);
+    const meta = this.roomMeta.get(code);
+    if (!meta) {
+      return undefined;
+    }
+    meta.hostSocketIds.delete(socketId);
+    if (meta.hostSocketIds.size > 0) {
+      return { code, hostless: false };
+    }
+    meta.hostlessSince = now;
+    meta.hostLost = true;
+    return { code, hostless: true };
+  }
+
+  // Cierra las salas que pasaron algún umbral y devuelve cuáles, para que el
+  // gateway avise a sus sockets. Recibe `now` para poder probarse sin timers.
+  closeExpiredRooms(
+    now: number = Date.now(),
+  ): { code: string; reason: RoomCloseReason }[] {
+    const expired: { code: string; reason: RoomCloseReason }[] = [];
+    for (const [code, meta] of this.roomMeta) {
+      if (now - meta.createdAt >= this.config.maxAgeMs) {
+        expired.push({ code, reason: 'max_age' });
+      } else if (
+        meta.hostlessSince !== null &&
+        now - meta.hostlessSince >= this.config.hostGraceMs
+      ) {
+        expired.push({ code, reason: 'host_left' });
+      }
+    }
+    for (const { code } of expired) {
+      this.closeRoom(code);
+    }
+    return expired;
+  }
+
+  closeRoom(code: string): void {
+    for (const service of this.roomScoped) {
+      service.disposeRoom(code);
+    }
+    const meta = this.roomMeta.get(code);
+    if (meta) {
+      for (const socketId of meta.hostSocketIds) {
+        this.hostSocketToRoom.delete(socketId);
+      }
+    }
+    this.roomMeta.delete(code);
+    this.rooms.delete(code);
   }
 
   joinRoom(code: string, name: string, socketId: string): RoomState {

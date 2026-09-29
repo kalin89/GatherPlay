@@ -6,6 +6,7 @@ import {
   ConnectedSocket,
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
+import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import {
   GameAlreadyStartedError,
@@ -14,6 +15,7 @@ import {
   RoomNotFoundError,
   RoomService,
   TeamNotFoundError,
+  TooManyRoomsError,
   UnknownGameError,
 } from './room.service.js';
 
@@ -60,17 +62,54 @@ interface SelectGamePayload {
 }
 
 @WebSocketGateway({ cors: { origin: '*' } })
-export class RoomGateway implements OnGatewayDisconnect {
+export class RoomGateway
+  implements OnGatewayDisconnect, OnModuleInit, OnModuleDestroy
+{
   @WebSocketServer()
   server!: Server;
 
+  private sweepTimer: NodeJS.Timeout | null = null;
+
   constructor(private readonly roomService: RoomService) {}
+
+  // Barrido único en vez de un temporizador por sala: más fácil de probar y
+  // no deja cientos de timers vivos. `unref` para no impedir que el proceso
+  // termine.
+  onModuleInit(): void {
+    this.sweepTimer = setInterval(
+      () => this.closeExpiredRooms(),
+      this.roomService.lifecycleConfig.sweepIntervalMs,
+    );
+    this.sweepTimer.unref?.();
+  }
+
+  onModuleDestroy(): void {
+    if (this.sweepTimer) {
+      clearInterval(this.sweepTimer);
+      this.sweepTimer = null;
+    }
+  }
+
+  private closeExpiredRooms(): void {
+    for (const { code, reason } of this.roomService.closeExpiredRooms()) {
+      this.server.to(code).emit('room_closed', { reason });
+      this.server.in(code).socketsLeave([code, screenRoomName(code)]);
+    }
+  }
 
   @SubscribeMessage('create_room')
   handleCreateRoom(@ConnectedSocket() client: Socket) {
-    const room = this.roomService.createRoom();
-    void client.join(room.code);
-    client.emit('room_state', room);
+    try {
+      const room = this.roomService.createRoom();
+      void client.join(room.code);
+      client.emit('room_state', room);
+    } catch (error) {
+      if (error instanceof TooManyRoomsError) {
+        client.emit('error', { message: error.message });
+        return;
+      }
+      throw error;
+    }
   }
 
   @SubscribeMessage('join_room')
@@ -205,7 +244,11 @@ export class RoomGateway implements OnGatewayDisconnect {
       const room = this.roomService.getRoomOrThrow(payload.code);
       void client.join(room.code);
       void client.join(screenRoomName(room.code));
+      const { reconnected } = this.roomService.attachHost(room.code, client.id);
       client.emit('room_state', room);
+      if (reconnected) {
+        this.server.to(room.code).emit('host_reconnected');
+      }
     } catch (error) {
       if (error instanceof RoomNotFoundError) {
         client.emit('error', { message: error.message });
@@ -219,6 +262,10 @@ export class RoomGateway implements OnGatewayDisconnect {
     const room = this.roomService.removePlayerBySocketId(client.id);
     if (room) {
       this.server.to(room.code).emit('room_state', room);
+    }
+    const host = this.roomService.detachHost(client.id);
+    if (host?.hostless) {
+      this.server.to(host.code).emit('host_disconnected');
     }
   }
 }

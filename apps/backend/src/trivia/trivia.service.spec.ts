@@ -477,4 +477,70 @@ describe('TriviaService', () => {
       .teams.reduce((sum, t) => sum + t.score, 0);
     expect(totalAfterSecond).toBe(12); // el acumulado real sí duplica
   });
+
+  describe('cierre de sala (RoomService.closeRoom)', () => {
+    it('detiene el turno en curso: avanzar el reloj ya no emite nada y no hay partida', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const trivia = createTrivia();
+      const events: TriviaEvent[] = [];
+      trivia.events$.subscribe((e) => events.push(e));
+      trivia.startMatch(setup.room.code);
+      await vi.advanceTimersByTimeAsync(0);
+      const eventsBeforeClose = events.length;
+
+      rooms.closeRoom(setup.room.code);
+      await vi.advanceTimersByTimeAsync(TRIVIA_TURN_SECONDS * 1000 * 2);
+
+      expect(events).toHaveLength(eventsBeforeClose);
+      expect(() =>
+        trivia.submitAnswer(setup.room.code, setup.teamA.socketId, 0),
+      ).toThrow(NoTriviaMatchError);
+    });
+
+    it('si la sala se cierra mientras la IA responde, no lanza ni resucita estado', async () => {
+      // Reloj real: hay que esperar un turno del event loop para que Node
+      // dispare `unhandledRejection`, y `setImmediate` está falseado.
+      vi.useRealTimers();
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      let release!: (questions: RawTriviaQuestion[]) => void;
+      const pending = new Promise<RawTriviaQuestion[]>((resolve) => {
+        release = resolve;
+      });
+      const aiContent = new AiContentService({ generate: vi.fn(() => pending) });
+      const trivia = new TriviaService(rooms, gameEngine, aiContent);
+      const events: TriviaEvent[] = [];
+      trivia.events$.subscribe((e) => events.push(e));
+      const unhandled = vi.fn();
+      process.once('unhandledRejection', unhandled);
+
+      trivia.startMatch(setup.room.code);
+      rooms.closeRoom(setup.room.code);
+      release(
+        Array.from({ length: 6 }, (_, i) => ({
+          pregunta: `${DEFAULT_QUESTION.pregunta} (${i})`,
+          correcta: DEFAULT_QUESTION.correcta,
+          incorrectas: DEFAULT_QUESTION.incorrectas,
+        })),
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+      process.off('unhandledRejection', unhandled);
+
+      expect(unhandled).not.toHaveBeenCalled();
+      expect(turnStartedEvents(events)).toHaveLength(0);
+      expect(
+        (trivia as unknown as { askedQuestions: Map<string, string[]> })
+          .askedQuestions.size,
+      ).toBe(0);
+    });
+
+    it('es idempotente y no falla si la sala nunca tuvo partida', () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const trivia = createTrivia();
+
+      expect(() => {
+        trivia.disposeRoom(setup.room.code);
+        trivia.disposeRoom(setup.room.code);
+      }).not.toThrow();
+    });
+  });
 });

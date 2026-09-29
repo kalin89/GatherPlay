@@ -483,4 +483,46 @@ describe('MemorizaObjetosService', () => {
     const overlap = [...firstIds].filter((id) => secondIds.has(id));
     expect(overlap).toHaveLength(0);
   });
+
+  describe('cierre de sala (RoomService.closeRoom)', () => {
+    it('detiene los relojes en curso: avanzar el reloj ya no emite nada y no hay partida', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const memoriza = createMemorizaObjetos();
+      const events: MemorizaObjetosEvent[] = [];
+      memoriza.events$.subscribe((e) => events.push(e));
+      memoriza.startMatch(setup.room.code);
+      await reachGuessingPhase(memoriza, setup);
+      const eventsBeforeClose = events.length;
+
+      rooms.closeRoom(setup.room.code);
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+
+      expect(events).toHaveLength(eventsBeforeClose);
+      expect(() => memoriza.passTurn(setup.room.code, setup.teamA.socketId)).toThrow(
+        NoMemorizaMatchError,
+      );
+    });
+
+    it('borra el acumulador de objetos ya usados de la sala', () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const memoriza = createMemorizaObjetos();
+      memoriza.startMatch(setup.room.code);
+      const internals = memoriza as unknown as { roomUsedObjects: Map<string, unknown> };
+      expect(internals.roomUsedObjects.size).toBe(1);
+
+      rooms.closeRoom(setup.room.code);
+
+      expect(internals.roomUsedObjects.size).toBe(0);
+    });
+
+    it('es idempotente y no falla si la sala nunca tuvo partida', () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const memoriza = createMemorizaObjetos();
+
+      expect(() => {
+        memoriza.disposeRoom(setup.room.code);
+        memoriza.disposeRoom(setup.room.code);
+      }).not.toThrow();
+    });
+  });
 });

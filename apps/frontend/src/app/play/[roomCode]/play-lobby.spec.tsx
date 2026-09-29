@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PlayLobby } from "./play-lobby";
 import type { RoomState } from "@/lib/room-types";
 
@@ -35,6 +35,10 @@ class FakeSocket {
 
   triggerError(payload: { message: string }) {
     this.handlers.get("error")?.(payload);
+  }
+
+  trigger(event: string, payload?: unknown) {
+    this.handlers.get(event)?.(payload);
   }
 }
 
@@ -238,6 +242,73 @@ describe("PlayLobby", () => {
       expect(
         screen.getByText("No existe una sala con el código ZZZZZ"),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe("ciclo de vida de la sala", () => {
+    function joinLobby(overrides: Partial<RoomState> = {}) {
+      render(<PlayLobby roomCode="ABCDE" />);
+      fireEvent.change(screen.getByPlaceholderText("Tu nombre"), {
+        target: { value: "Ana" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /unirme/i }));
+      lastSocket?.triggerConnect();
+      lastSocket?.triggerRoomState(
+        makeRoom({
+          players: [{ id: "p1", name: "Ana", socketId: "socket-1" }],
+          teams: [
+            { id: "t1", name: "Rojos", color: "#ff0000", playerIds: ["p1"], score: 0 },
+          ],
+          ...overrides,
+        }),
+      );
+    }
+
+    it("no muestra el aviso de anfitrión desconectado mientras todo va bien", async () => {
+      joinLobby();
+
+      await waitFor(() => expect(screen.getByText("Rojos")).toBeInTheDocument());
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    });
+
+    it("muestra el aviso sobre el lobby con host_disconnected y lo quita con host_reconnected", async () => {
+      joinLobby();
+      await waitFor(() => expect(screen.getByText("Rojos")).toBeInTheDocument());
+
+      act(() => lastSocket?.trigger("host_disconnected"));
+      await waitFor(() =>
+        expect(screen.getByRole("status")).toHaveTextContent(/anfitrión perdió la conexión/i),
+      );
+      expect(screen.getByText("Rojos")).toBeInTheDocument();
+
+      act(() => lastSocket?.trigger("host_reconnected"));
+      await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+    });
+
+    it("muestra el aviso también sobre la vista de un juego en curso", async () => {
+      joinLobby({ currentGame: "trivia" });
+      await waitFor(() =>
+        expect(screen.getByText(/esperando a que arranque la partida/i)).toBeInTheDocument(),
+      );
+
+      act(() => lastSocket?.trigger("host_disconnected"));
+
+      await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+      expect(screen.getByText(/esperando a que arranque la partida/i)).toBeInTheDocument();
+    });
+
+    it("room_closed reemplaza la vista por el aviso de sala cerrada con enlace al inicio", async () => {
+      joinLobby();
+      await waitFor(() => expect(screen.getByText("Rojos")).toBeInTheDocument());
+
+      act(() => lastSocket?.trigger("room_closed", { reason: "host_left" }));
+
+      await waitFor(() =>
+        expect(screen.getByText(/el anfitrión se desconectó y la sala se cerró/i)).toBeInTheDocument(),
+      );
+      expect(screen.queryByText("Rojos")).not.toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /volver al inicio/i })).toHaveAttribute("href", "/");
+      expect(lastSocket?.disconnected).toBe(true);
     });
   });
 });

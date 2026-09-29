@@ -1,0 +1,45 @@
+.page {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  padding: 32px 20px;
+  background: linear-gradient(-45deg, #7c3aed, #db2777, #f97316, #7c3aed);
+  background-size: 300% 300%;
+  animation: gradientShift 12s ease infinite;
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.message {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  text-align: center;
+  max-width: 340px;
+}
+
+/* Botón grande, pensado para tocar con el dedo. */
+.link {
+  padding: 16px 28px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #7c3aed;
+  background: #fff;
+  border-radius: 999px;
+  text-decoration: none;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}

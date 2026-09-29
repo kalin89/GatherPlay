@@ -1,6 +1,7 @@
 import { Injectable, OnModuleDestroy, Optional } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { RoomService } from '../room/room.service.js';
+import type { RoomScopedState } from '../room/room-scoped-state.js';
 import { screenRoomName } from '../room/room.gateway.js';
 import { GameEngineService } from '../game-engine/game-engine.service.js';
 import { NotEnoughTeamsError } from '../game-engine/turn-distribution.js';
@@ -113,7 +114,7 @@ export const RESULTS_DISPLAY_MS = 10_000;
 // de "instrucciones + Listo de todos" (ver
 // specs/features/la-rocola-module/analysis.md).
 @Injectable()
-export class LaRocolaService implements OnModuleDestroy {
+export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
   private readonly matches = new Map<string, RocolaMatchState>();
   // Canciones ya sonadas por sala — sobrevive entre partidas, mismo límite
   // ya documentado de "no hay limpieza de salas todavía".
@@ -129,7 +130,18 @@ export class LaRocolaService implements OnModuleDestroy {
     private readonly scheduler: (callback: () => void, ms: number) => void = (callback, ms) => {
       setTimeout(callback, ms);
     },
-  ) {}
+  ) {
+    rooms.registerRoomScoped(this);
+  }
+
+  // Libera todo el estado de la sala cuando `RoomService.closeRoom` la cierra:
+  // detiene el temporizador de la partida en curso y borra tanto la partida
+  // como el acumulador por sala. Idempotente.
+  disposeRoom(code: string): void {
+    this.matches.get(code)?.timer?.stop();
+    this.matches.delete(code);
+    this.roomUsedSongs.delete(code);
+  }
 
   onModuleDestroy(): void {
     for (const match of this.matches.values()) {
@@ -355,6 +367,8 @@ export class LaRocolaService implements OnModuleDestroy {
       [...used],
       match.filtro ?? undefined,
     );
+    // La sala pudo cerrarse mientras se resolvía el catálogo: no resucitar estado.
+    if (this.matches.get(code) !== match) return;
     songs.forEach((s) => used.add(s.id));
     this.roomUsedSongs.set(code, used);
 

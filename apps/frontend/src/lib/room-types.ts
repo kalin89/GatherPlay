@@ -19,6 +19,9 @@ export interface Team {
 
 export type RoomStatus = "lobby" | "jugando" | "resultados";
 
+/** Motivo por el que el backend cerró la sala (evento `room_closed`). */
+export type RoomClosedReason = "host_left" | "max_age";
+
 export interface RoundState {
   durationSeconds: number;
   remainingSeconds: number;

@@ -8,6 +8,7 @@ import type { GestureGenerator } from '../ai-content/gesture-generator.js';
 import {
   CarasYGestosService,
   GestosMatchAlreadyRunningError,
+  NoGestosMatchError,
   NotYourTurnError,
   TurnAlreadyStartedError,
   TurnNotStartedError,
@@ -416,5 +417,66 @@ describe('CarasYGestosService', () => {
 
     const primeraPartida = Array.from({ length: 30 }, (_, i) => `Palabra${i}`);
     expect(generate).toHaveBeenNthCalledWith(2, 30, primeraPartida);
+  });
+
+  describe('cierre de sala (RoomService.closeRoom)', () => {
+    it('detiene el turno en curso: avanzar el reloj ya no emite nada y no hay partida', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const gestos = createCarasYGestos();
+      const events: CarasYGestosEvent[] = [];
+      gestos.events$.subscribe((e) => events.push(e));
+      gestos.startMatch(setup.room.code);
+      await vi.advanceTimersByTimeAsync(0);
+      const current = currentTurnPlayer(events, setup);
+      gestos.startTurn(setup.room.code, current.socketId);
+      const eventsBeforeClose = events.length;
+
+      rooms.closeRoom(setup.room.code);
+      await vi.advanceTimersByTimeAsync(TURN_SECONDS * 1000 * 2);
+
+      expect(events).toHaveLength(eventsBeforeClose);
+      expect(() => gestos.startTurn(setup.room.code, current.socketId)).toThrow(NoGestosMatchError);
+    });
+
+    it('si la sala se cierra mientras la IA responde, no lanza ni resucita estado', async () => {
+      // Reloj real: hay que esperar un turno del event loop para que Node
+      // dispare `unhandledRejection`, y `setImmediate` está falseado.
+      vi.useRealTimers();
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      let release!: (palabras: string[]) => void;
+      const pending = new Promise<string[]>((resolve) => {
+        release = resolve;
+      });
+      const aiContent = new AiContentService(null, Math.random, {
+        generate: vi.fn(() => pending),
+      });
+      const gestos = new CarasYGestosService(rooms, gameEngine, aiContent);
+      const events: CarasYGestosEvent[] = [];
+      gestos.events$.subscribe((e) => events.push(e));
+      const unhandled = vi.fn();
+      process.once('unhandledRejection', unhandled);
+
+      gestos.startMatch(setup.room.code);
+      rooms.closeRoom(setup.room.code);
+      release(Array.from({ length: 30 }, (_, i) => `Palabra${i}`));
+      await new Promise((resolve) => setImmediate(resolve));
+      process.off('unhandledRejection', unhandled);
+
+      expect(unhandled).not.toHaveBeenCalled();
+      expect(turnWaitingEvents(events)).toHaveLength(0);
+      expect(
+        (gestos as unknown as { usedWords: Map<string, unknown> }).usedWords.size,
+      ).toBe(0);
+    });
+
+    it('es idempotente y no falla si la sala nunca tuvo partida', () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const gestos = createCarasYGestos();
+
+      expect(() => {
+        gestos.disposeRoom(setup.room.code);
+        gestos.disposeRoom(setup.room.code);
+      }).not.toThrow();
+    });
   });
 });

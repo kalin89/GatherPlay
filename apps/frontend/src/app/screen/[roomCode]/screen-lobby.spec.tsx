@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ScreenLobby } from "./screen-lobby";
 import type { RoomState } from "@/lib/room-types";
 
@@ -395,5 +395,26 @@ describe("ScreenLobby", () => {
       expect(screen.getByText(/arrancando trivia/i)).toBeInTheDocument();
       expect(screen.queryByText("Resultado final")).not.toBeInTheDocument();
     });
+  });
+
+  it("room_closed reemplaza la vista por el aviso de sala cerrada y corta la música de fondo", async () => {
+    render(<ScreenLobby roomCode="ABCDE" />);
+    lastSocket?.triggerConnect();
+    lastSocket?.triggerRoomState(makeRoom({ currentGame: "trivia" }));
+    await waitFor(() => expect(startBackgroundMusic).toHaveBeenCalled());
+    startBackgroundMusic.mockClear();
+    stopBackgroundMusic.mockClear();
+
+    act(() => lastSocket?.trigger("room_closed", { reason: "max_age" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/la sala llegó a su duración máxima/i)).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("link", { name: /volver al inicio/i })).toHaveAttribute("href", "/");
+    // `currentGame` sigue seteado en el último `state`: sin cortar por
+    // `closedReason`, el efecto volvería a arrancar la música.
+    expect(startBackgroundMusic).not.toHaveBeenCalled();
+    expect(stopBackgroundMusic).toHaveBeenCalled();
+    expect(lastSocket?.disconnected).toBe(true);
   });
 });

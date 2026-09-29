@@ -1,6 +1,7 @@
 import { Injectable, OnModuleDestroy, Optional } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { RoomService } from '../room/room.service.js';
+import type { RoomScopedState } from '../room/room-scoped-state.js';
 import { screenRoomName } from '../room/room.gateway.js';
 import { GameEngineService } from '../game-engine/game-engine.service.js';
 import { AiContentService } from '../ai-content/ai-content.service.js';
@@ -93,7 +94,7 @@ const MAX_TRACKED_WORDS_PER_ROOM = 150;
 // el jugador debe presionar "Iniciar" antes de que arranque el temporizador
 // — ver specs/features/caras-y-gestos-module/analysis.md.
 @Injectable()
-export class CarasYGestosService implements OnModuleDestroy {
+export class CarasYGestosService implements OnModuleDestroy, RoomScopedState {
   private readonly matches = new Map<string, GestosMatchState>();
   // Palabras ya usadas en cada sala, entre partidas — en memoria, se pierde
   // si se reinicia el backend. Sobrevive a cada partida individual (no se
@@ -113,7 +114,18 @@ export class CarasYGestosService implements OnModuleDestroy {
     ) => {
       setTimeout(callback, ms);
     },
-  ) {}
+  ) {
+    rooms.registerRoomScoped(this);
+  }
+
+  // Libera todo el estado de la sala cuando `RoomService.closeRoom` la cierra:
+  // detiene el temporizador de la partida en curso y borra tanto la partida
+  // como el acumulador por sala. Idempotente.
+  disposeRoom(code: string): void {
+    this.matches.get(code)?.timer?.stop();
+    this.matches.delete(code);
+    this.usedWords.delete(code);
+  }
 
   onModuleDestroy(): void {
     for (const match of this.matches.values()) {
@@ -270,6 +282,9 @@ export class CarasYGestosService implements OnModuleDestroy {
         pool.push(pool[i % originalLength]!);
       }
     }
+
+    // La sala pudo cerrarse mientras se esperaba a la IA: no resucitar estado.
+    if (this.matches.get(code) !== match) return;
 
     match.wordPool = pool;
 

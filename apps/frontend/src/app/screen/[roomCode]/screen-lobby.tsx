@@ -12,6 +12,7 @@ import type { AdivinaPalabraView } from "@/lib/adivina-palabra-match";
 import type { LaRocolaView } from "@/lib/la-rocola-match";
 import type { MemorizaObjetosView } from "@/lib/memoriza-objetos-match";
 import { RoomCode } from "@/components/room-code";
+import { RoomClosedNotice } from "@/components/room-closed-notice";
 import { JoinQr } from "@/components/join-qr";
 import { TeamManager } from "./team-manager";
 import { StartMatchButton } from "./start-match-button";
@@ -76,6 +77,7 @@ export function ScreenLobby({ roomCode }: { roomCode: string }) {
     error,
     actionError,
     connecting,
+    closedReason,
     actions,
     trivia,
     gestos,
@@ -104,14 +106,19 @@ export function ScreenLobby({ roomCode }: { roomCode: string }) {
   const currentGame = state?.currentGame ?? null;
   useEffect(() => {
     // Música de fondo mientras se juega — salvo en La Rocola, donde hay que
-    // escuchar la canción que se está adivinando.
-    if (currentGame !== null && currentGame !== "la-rocola") {
+    // escuchar la canción que se está adivinando, y salvo si la sala ya se
+    // cerró (`currentGame` sigue seteado en el último `state` recibido).
+    if (closedReason === null && currentGame !== null && currentGame !== "la-rocola") {
       startBackgroundMusic();
     } else {
       stopBackgroundMusic();
     }
     return () => stopBackgroundMusic();
-  }, [currentGame]);
+  }, [currentGame, closedReason]);
+
+  if (closedReason) {
+    return <RoomClosedNotice reason={closedReason} />;
+  }
 
   if (error) {
     return (

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
 import { createSocket } from "@/lib/socket";
-import type { RoomState } from "@/lib/room-types";
+import type { RoomClosedReason, RoomState } from "@/lib/room-types";
 import {
   initialTriviaMatchView,
   subscribeToTrivia,
@@ -56,6 +56,13 @@ export interface UseJoinRoomResult {
    * propio — necesario porque el servidor no marca "vos sos este" en
    * `room_state`, solo manda la lista completa. */
   playerId: string | null;
+  /** `false` mientras el backend avisó que la pantalla del anfitrión se
+   * desconectó (`host_disconnected`) y todavía no volvió (`host_reconnected`).
+   * La sala sigue viva durante la gracia del servidor. */
+  hostConnected: boolean;
+  /** Motivo de cierre de la sala (`room_closed`), o null si sigue abierta.
+   * Al recibirlo el hook desconecta el socket: la sala ya no existe. */
+  closedReason: RoomClosedReason | null;
   trivia: TriviaMatchView;
   /** Versión "jugador" — compara `gestos_turn_waiting.playerId` contra el
    * propio `playerId` para distinguir `ready_to_start` de `waiting_turn`. */
@@ -96,6 +103,8 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
   const [error, setError] = useState<RoomError | null>(null);
   const [actionError, setActionError] = useState<RoomError | null>(null);
   const [playerId, setPlayerId] = useState<string | null>(null);
+  const [hostConnected, setHostConnected] = useState(true);
+  const [closedReason, setClosedReason] = useState<RoomClosedReason | null>(null);
   const [trivia, dispatchTrivia] = useReducer(triviaReducer, initialTriviaMatchView);
   const [gestos, dispatchGestos] = useReducer(
     (state: GestosMatchView, action: GestosAction) => gestosReducer(state, action, playerId),
@@ -166,6 +175,16 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
           dispatchLaRocola({ type: "reset" });
           dispatchMemorizaObjetos({ type: "reset" });
         }
+      });
+
+      socket.on("host_disconnected", () => setHostConnected(false));
+      socket.on("host_reconnected", () => setHostConnected(true));
+
+      socket.on("room_closed", (payload: { reason: RoomClosedReason }) => {
+        setClosedReason(payload.reason);
+        // La sala ya no existe: sin esto socket.io reintentaría conectar y el
+        // `connect` de arriba volvería a emitir `join_room` en vano.
+        socket.disconnect();
       });
 
       socket.on("error", (payload: RoomError) => {
@@ -259,6 +278,8 @@ export function useJoinRoom(roomCode: string): UseJoinRoomResult {
     error,
     actionError,
     playerId,
+    hostConnected,
+    closedReason,
     trivia,
     gestos,
     adivinaPalabra,

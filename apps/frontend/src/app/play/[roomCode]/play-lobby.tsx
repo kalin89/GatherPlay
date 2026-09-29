@@ -11,6 +11,8 @@ import type { AdivinaPalabraView } from "@/lib/adivina-palabra-match";
 import type { LaRocolaView } from "@/lib/la-rocola-match";
 import type { MemorizaObjetosView } from "@/lib/memoriza-objetos-match";
 import { TeamBoard } from "@/components/team-board";
+import { HostDisconnectedBanner } from "@/components/host-disconnected-banner";
+import { RoomClosedNotice } from "@/components/room-closed-notice";
 import { PlayTrivia } from "./play-trivia";
 import { PlayGestos } from "./play-gestos";
 import { PlayAdivinaPalabra } from "./play-adivina-palabra";
@@ -119,6 +121,8 @@ export function PlayLobby({ roomCode }: { roomCode: string }) {
     error,
     actionError,
     playerId,
+    hostConnected,
+    closedReason,
     trivia,
     gestos,
     adivinaPalabra,
@@ -149,6 +153,10 @@ export function PlayLobby({ roomCode }: { roomCode: string }) {
     join(name);
   }
 
+  if (closedReason) {
+    return <RoomClosedNotice reason={closedReason} />;
+  }
+
   if (status === "error" && error) {
     return (
       <main className={styles.page}>
@@ -158,8 +166,10 @@ export function PlayLobby({ roomCode }: { roomCode: string }) {
   }
 
   if (status === "joined" && state) {
+    const hostBanner = hostConnected ? null : <HostDisconnectedBanner />;
+
     if (state.currentGame !== null) {
-      return renderGameControl(
+      const gameControl = renderGameControl(
         state.currentGame,
         state,
         playerId,
@@ -182,6 +192,12 @@ export function PlayLobby({ roomCode }: { roomCode: string }) {
         passMemorizaTurn,
         actionError,
       );
+      return (
+        <>
+          {hostBanner}
+          {gameControl}
+        </>
+      );
     }
 
     const { teams } = splitPlayersByTeam(state);
@@ -189,6 +205,7 @@ export function PlayLobby({ roomCode }: { roomCode: string }) {
 
     return (
       <main className={styles.page}>
+        {hostBanner}
         <p className={styles.greeting}>
           ¡Listo, <strong>{trimmedName}</strong>!
         </p>
