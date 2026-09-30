@@ -27,6 +27,10 @@ export class RoundTimer {
     }
   }
 
+  get remainingSeconds(): number {
+    return this.remaining;
+  }
+
   get isRunning(): boolean {
     return this.handle !== null;
   }

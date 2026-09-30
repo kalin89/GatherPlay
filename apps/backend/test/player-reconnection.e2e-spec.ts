@@ -161,4 +161,94 @@ describe('Reconexión de jugadores (e2e)', () => {
     late.on('connect', () => late.emit('rejoin_room', { code, playerToken }));
     expect((await failure).code).toBe('REJOIN_FAILED');
   });
+
+  it('con Trivia en curso, quien reconecta recibe el estado del turno y solo el jugador en turno ve la pregunta', async () => {
+    const screen = connect();
+    const created = waitFor<RoomState>(screen, 'room_state');
+    screen.on('connect', () => screen.emit('create_room'));
+    const { code } = await created;
+
+    async function join(name: string) {
+      const socket = connect();
+      const joined = waitFor<Joined>(socket, 'joined');
+      socket.on('connect', () => socket.emit('join_room', { code, name }));
+      return { socket, ...(await joined) };
+    }
+    const ana = await join('Ana');
+    const beto = await join('Beto');
+
+    for (const [name, color] of [
+      ['Rojos', '#FF0000'],
+      ['Azules', '#0000FF'],
+    ]) {
+      const made = waitFor<RoomState>(screen, 'room_state');
+      screen.emit('create_team', { code, name, color });
+      await made;
+    }
+    const teams = await new Promise<RoomState>((resolve) => {
+      screen.once('room_state', resolve);
+      screen.emit('watch_room', { code });
+    });
+    for (const [player, team] of [
+      [ana, teams.teams[0]!],
+      [beto, teams.teams[1]!],
+    ] as const) {
+      const assigned = waitFor<RoomState>(screen, 'room_state');
+      screen.emit('assign_team', {
+        code,
+        playerId: player.playerId,
+        teamId: team.id,
+      });
+      await assigned;
+    }
+    const selected = waitFor<RoomState>(screen, 'room_state');
+    screen.emit('select_game', { code, gameId: 'trivia' });
+    await selected;
+
+    const started = Promise.race([
+      waitFor<{ playerId: string }>(ana.socket, 'trivia_turn_started'),
+      waitFor<{ playerId: string }>(beto.socket, 'trivia_turn_started'),
+    ]);
+    screen.emit('start_trivia_game', { code });
+    const { playerId: turnPlayerId } = await started;
+
+    // Ambos pierden la conexión y vuelven dentro de la gracia (400 ms).
+    ana.socket.disconnect();
+    beto.socket.disconnect();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    async function comeBack(player: { playerToken: string }) {
+      const socket = connect();
+      const received: { event: string; payload: any }[] = [];
+      for (const event of [
+        'trivia_turn_waiting',
+        'trivia_turn_started',
+        'trivia_turn_update',
+      ]) {
+        socket.on(event, (payload) => received.push({ event, payload }));
+      }
+      const joined = waitFor<Joined>(socket, 'joined');
+      socket.on('connect', () =>
+        socket.emit('rejoin_room', { code, playerToken: player.playerToken }),
+      );
+      await joined;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      return received;
+    }
+    const anaEvents = await comeBack(ana);
+    const betoEvents = await comeBack(beto);
+
+    const [inTurn, notInTurn] =
+      turnPlayerId === ana.playerId
+        ? [anaEvents, betoEvents]
+        : [betoEvents, anaEvents];
+    expect(inTurn.map((e) => e.event)).toEqual([
+      'trivia_turn_waiting',
+      'trivia_turn_started',
+      'trivia_turn_update',
+    ]);
+    expect(inTurn[1]!.payload.opciones).toHaveLength(4);
+    expect(notInTurn.map((e) => e.event)).toEqual(['trivia_turn_waiting']);
+    expect(JSON.stringify(notInTurn)).not.toContain('opciones');
+  });
 });

@@ -173,6 +173,13 @@ export class RoomGateway
         playerToken: payload.playerToken,
       });
       this.server.to(room.code).emit('room_state', room);
+      // Solo a este socket: lo que le corresponde ver del juego en curso.
+      for (const { event, payload } of this.roomService.getSnapshot(
+        room.code,
+        player.id,
+      )) {
+        client.emit(event, payload);
+      }
     } catch (error) {
       if (error instanceof RejoinFailedError) {
         client.emit('error', { code: 'REJOIN_FAILED', message: error.message });

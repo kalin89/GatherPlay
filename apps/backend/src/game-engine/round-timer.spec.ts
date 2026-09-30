@@ -80,4 +80,15 @@ describe('RoundTimer', () => {
     timer.stop();
     expect(timer.isRunning).toBe(false);
   });
+
+  it('expone los segundos restantes, que bajan con cada tick', () => {
+    const timer = new RoundTimer(vi.fn(), vi.fn());
+
+    timer.start(10);
+    expect(timer.remainingSeconds).toBe(10);
+
+    vi.advanceTimersByTime(3000);
+    expect(timer.remainingSeconds).toBe(7);
+    timer.stop();
+  });
 });

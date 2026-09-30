@@ -543,4 +543,154 @@ describe('TriviaService', () => {
       }).not.toThrow();
     });
   });
+
+  describe('snapshotFor (reconexión)', () => {
+    async function startedMatch() {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const trivia = createTrivia();
+      const events: TriviaEvent[] = [];
+      trivia.events$.subscribe((e) => events.push(e));
+      trivia.startMatch(setup.room.code);
+      await vi.advanceTimersByTimeAsync(0);
+      const current = currentTurnPlayer(events, setup);
+      const other = current === setup.teamA ? setup.teamB : setup.teamA;
+      return { setup, trivia, events, current, other };
+    }
+
+    it('devuelve vacío si la sala no tiene partida ni resultados', () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const trivia = createTrivia();
+
+      expect(trivia.snapshotFor(setup.room.code, setup.teamA.playerId)).toEqual([]);
+    });
+
+    it('devuelve vacío mientras se esperan las preguntas de la IA', () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const trivia = createTrivia();
+
+      trivia.startMatch(setup.room.code);
+
+      expect(trivia.snapshotFor(setup.room.code, setup.teamA.playerId)).toEqual([]);
+    });
+
+    it('al jugador en turno le da waiting + started (con la pregunta) + el tiempo restante real', async () => {
+      const { setup, trivia, current } = await startedMatch();
+      await vi.advanceTimersByTimeAsync(4000);
+
+      const snapshot = trivia.snapshotFor(setup.room.code, current.playerId);
+
+      expect(snapshot.map((e) => e.event)).toEqual([
+        'trivia_turn_waiting',
+        'trivia_turn_started',
+        'trivia_turn_update',
+      ]);
+      expect(snapshot[1]!.payload).toMatchObject({
+        code: setup.room.code,
+        playerId: current.playerId,
+        pregunta: '¿2+2? (0)',
+        durationSeconds: TRIVIA_TURN_SECONDS,
+      });
+      expect(snapshot[2]!.payload).toEqual({
+        code: setup.room.code,
+        remainingSeconds: TRIVIA_TURN_SECONDS - 4,
+      });
+    });
+
+    it('a otro jugador solo le da waiting, sin pregunta ni opciones', async () => {
+      const { setup, trivia, current, other } = await startedMatch();
+
+      const snapshot = trivia.snapshotFor(setup.room.code, other.playerId);
+
+      expect(snapshot.map((e) => e.event)).toEqual(['trivia_turn_waiting']);
+      expect(snapshot[0]!.payload).toMatchObject({ playerId: current.playerId });
+      expect(JSON.stringify(snapshot)).not.toContain('¿2+2?');
+    });
+
+    it('entre turnos devuelve el resultado del turno ya resuelto', async () => {
+      const { setup, trivia, current } = await startedMatch();
+      await vi.advanceTimersByTimeAsync(TRIVIA_TURN_SECONDS * 1000);
+
+      const snapshot = trivia.snapshotFor(setup.room.code, current.playerId);
+
+      expect(snapshot.map((e) => e.event)).toEqual(['trivia_turn_result']);
+      expect(snapshot[0]!.payload).toMatchObject({
+        code: setup.room.code,
+        resultado: { playerId: current.playerId, opcionElegida: null },
+      });
+    });
+
+    it('al terminar la partida devuelve el marcador final hasta volver a la selección', async () => {
+      const { setup, trivia, current } = await startedMatch();
+      await vi.advanceTimersByTimeAsync(
+        6 * (TRIVIA_TURN_SECONDS * 1000 + TURN_TRANSITION_DELAY_MS),
+      );
+
+      const snapshot = trivia.snapshotFor(setup.room.code, current.playerId);
+      expect(snapshot.map((e) => e.event)).toEqual(['trivia_match_result']);
+
+      await vi.advanceTimersByTimeAsync(RESULTS_DISPLAY_MS);
+      expect(trivia.snapshotFor(setup.room.code, current.playerId)).toEqual([]);
+    });
+  });
+
+  describe('jugador que cambia de socket o desaparece durante el turno', () => {
+    it('los trivia_turn_update van al socket nuevo del jugador en turno', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const trivia = createTrivia();
+      const events: TriviaEvent[] = [];
+      trivia.events$.subscribe((e) => events.push(e));
+      trivia.startMatch(setup.room.code);
+      await vi.advanceTimersByTimeAsync(0);
+      const current = currentTurnPlayer(events, setup);
+
+      rooms.getRoomOrThrow(setup.room.code).players.find(
+        (p) => p.id === current.playerId,
+      )!.socketId = 'socket-nuevo';
+      await vi.advanceTimersByTimeAsync(1000);
+
+      const updates = events.filter((e) => e.type === 'trivia_turn_update');
+      expect(updates.at(-1)).toMatchObject({
+        targetSocketIds: [`${setup.room.code}:screen`, 'socket-nuevo'],
+      });
+    });
+
+    it('si el jugador en turno vence su gracia, el turno se resuelve sin excepción', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const trivia = createTrivia();
+      const events: TriviaEvent[] = [];
+      trivia.events$.subscribe((e) => events.push(e));
+      trivia.startMatch(setup.room.code);
+      await vi.advanceTimersByTimeAsync(0);
+      const current = currentTurnPlayer(events, setup);
+      const room = rooms.getRoomOrThrow(setup.room.code);
+      const name = room.players.find((p) => p.id === current.playerId)!.name;
+
+      room.players = room.players.filter((p) => p.id !== current.playerId);
+      await vi.advanceTimersByTimeAsync(TRIVIA_TURN_SECONDS * 1000);
+
+      expect(turnResultEvents(events)[0]).toMatchObject({
+        resultado: { playerId: current.playerId, playerName: name, opcionElegida: null },
+      });
+    });
+
+    it('si el jugador ya no está al empezar su turno, se salta al siguiente', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const trivia = createTrivia();
+      const events: TriviaEvent[] = [];
+      trivia.events$.subscribe((e) => events.push(e));
+      trivia.startMatch(setup.room.code);
+      await vi.advanceTimersByTimeAsync(0);
+      const first = currentTurnPlayer(events, setup);
+      const second = first === setup.teamA ? setup.teamB : setup.teamA;
+
+      const room = rooms.getRoomOrThrow(setup.room.code);
+      room.players = room.players.filter((p) => p.id !== second.playerId);
+      await vi.advanceTimersByTimeAsync(
+        TRIVIA_TURN_SECONDS * 1000 + TURN_TRANSITION_DELAY_MS,
+      );
+
+      // El siguiente turno era del jugador eliminado: le vuelve a tocar al primero.
+      expect(turnStartedEvents(events)[1]).toMatchObject({ playerId: first.playerId });
+    });
+  });
 });

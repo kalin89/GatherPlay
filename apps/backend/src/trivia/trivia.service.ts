@@ -1,7 +1,7 @@
 import { Injectable, OnModuleDestroy, Optional } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { RoomService } from '../room/room.service.js';
-import type { RoomScopedState } from '../room/room-scoped-state.js';
+import type { GameSnapshotEvent, RoomScopedState } from '../room/room-scoped-state.js';
 import { screenRoomName } from '../room/room.gateway.js';
 import { GameEngineService } from '../game-engine/game-engine.service.js';
 import { AiContentService } from '../ai-content/ai-content.service.js';
@@ -68,7 +68,19 @@ interface TriviaMatchState {
   // team.score, que es el acumulado de por vida y se ve en el panel de
   // selección de juego.
   matchScores: Map<string, number>;
+  // Nombre del jugador del turno en curso: el jugador puede vencer su gracia y
+  // salir de `room.players` durante el turno, y el resultado/snapshot no debe
+  // depender de encontrarlo.
+  currentPlayerName: string;
+  // Resultado del turno ya resuelto, mientras dura la pausa antes del
+  // siguiente; null durante un turno en curso.
+  lastTurnResult: TriviaTurnResultPayload | null;
 }
+
+type TriviaTurnResultPayload = Omit<
+  Extract<TriviaEvent, { type: 'trivia_turn_result' }>,
+  'type'
+>;
 
 const DEFAULT_CATEGORY = 'general';
 const ROUNDS_PER_PLAYER = 3;
@@ -94,6 +106,9 @@ export class TriviaService implements OnModuleDestroy, RoomScopedState {
   // si se reinicia el backend (la memoria persistente entre reinicios es la
   // tarea de Fase 4 de `content_banks` en Postgres, todavía no hecha).
   private readonly askedQuestions = new Map<string, string[]>();
+  // Marcador final de la partida que acaba de terminar, mientras dura la
+  // pantalla de resultados (para quien reconecta en ese lapso).
+  private readonly finishedScores = new Map<string, TeamScore[]>();
   private readonly eventsSubject = new Subject<TriviaEvent>();
   readonly events$: Observable<TriviaEvent> = this.eventsSubject.asObservable();
 
@@ -119,6 +134,61 @@ export class TriviaService implements OnModuleDestroy, RoomScopedState {
     this.matches.get(code)?.timer?.stop();
     this.matches.delete(code);
     this.askedQuestions.delete(code);
+    this.finishedScores.delete(code);
+  }
+
+  // Lo que necesita ver un jugador que reconecta. La pregunta con opciones solo
+  // va al jugador en turno (igual que en `startTurn`); el resto recibe lo
+  // mismo que ve cualquiera.
+  snapshotFor(code: string, playerId: string): GameSnapshotEvent[] {
+    const match = this.matches.get(code);
+    if (!match) {
+      const scores = this.finishedScores.get(code);
+      return scores
+        ? [{ event: 'trivia_match_result', payload: { code, scores } }]
+        : [];
+    }
+    if (match.questions.length === 0) {
+      return [];
+    }
+
+    const turn = match.turns[match.currentIndex]!;
+    if (match.lastTurnResult) {
+      return [{ event: 'trivia_turn_result', payload: match.lastTurnResult }];
+    }
+
+    const events: GameSnapshotEvent[] = [
+      {
+        event: 'trivia_turn_waiting',
+        payload: {
+          code,
+          playerId: turn.playerId,
+          playerName: match.currentPlayerName,
+          teamId: turn.teamId,
+        },
+      },
+    ];
+    if (turn.playerId === playerId && match.timer) {
+      const question = this.currentQuestion(match);
+      events.push(
+        {
+          event: 'trivia_turn_started',
+          payload: {
+            code,
+            playerId: turn.playerId,
+            playerName: match.currentPlayerName,
+            pregunta: question.pregunta,
+            opciones: question.opciones,
+            durationSeconds: TRIVIA_TURN_SECONDS,
+          },
+        },
+        {
+          event: 'trivia_turn_update',
+          payload: { code, remainingSeconds: match.timer.remainingSeconds },
+        },
+      );
+    }
+    return events;
   }
 
   onModuleDestroy(): void {
@@ -144,7 +214,10 @@ export class TriviaService implements OnModuleDestroy, RoomScopedState {
       answered: false,
       timer: null,
       matchScores: new Map(room.teams.map((team) => [team.id, 0])),
+      currentPlayerName: '',
+      lastTurnResult: null,
     });
+    this.finishedScores.delete(code);
 
     this.emit({ type: 'room_state', code, room });
     void this.loadQuestionsAndStartFirstTurn(
@@ -217,11 +290,16 @@ export class TriviaService implements OnModuleDestroy, RoomScopedState {
     const match = this.matches.get(code)!;
     const room = this.rooms.getRoomOrThrow(code);
     const turn = match.turns[match.currentIndex]!;
-    const player = room.players.find((p) => p.id === turn.playerId)!;
+    const player = room.players.find((p) => p.id === turn.playerId);
+    // Pudo vencer su gracia entre turnos: se salta su turno.
+    if (!player) {
+      this.advanceOrFinish(code);
+      return;
+    }
     const question = this.currentQuestion(match);
     match.answered = false;
-
-    const targetSocketIds = [screenRoomName(code), player.socketId];
+    match.currentPlayerName = player.name;
+    match.lastTurnResult = null;
 
     this.emit({
       type: 'trivia_turn_waiting',
@@ -233,7 +311,7 @@ export class TriviaService implements OnModuleDestroy, RoomScopedState {
     this.emit({
       type: 'trivia_turn_started',
       code,
-      targetSocketIds,
+      targetSocketIds: this.turnTargets(code, player.id),
       playerId: player.id,
       playerName: player.name,
       pregunta: question.pregunta,
@@ -243,7 +321,13 @@ export class TriviaService implements OnModuleDestroy, RoomScopedState {
 
     const timer = new RoundTimer(
       (remainingSeconds) =>
-        this.emit({ type: 'trivia_turn_update', code, targetSocketIds, remainingSeconds }),
+        // El socket del jugador se busca en cada tick: si reconectó, cambió.
+        this.emit({
+          type: 'trivia_turn_update',
+          code,
+          targetSocketIds: this.turnTargets(code, player.id),
+          remainingSeconds,
+        }),
       () => this.resolveTurn(code, null),
     );
     match.timer = timer;
@@ -254,9 +338,7 @@ export class TriviaService implements OnModuleDestroy, RoomScopedState {
     const match = this.matches.get(code);
     if (!match) return;
 
-    const room = this.rooms.getRoomOrThrow(code);
     const turn = match.turns[match.currentIndex]!;
-    const player = room.players.find((p) => p.id === turn.playerId)!;
     const question = this.currentQuestion(match);
 
     const correcta = opcionIndex !== null && opcionIndex === question.indiceCorrecto;
@@ -268,22 +350,23 @@ export class TriviaService implements OnModuleDestroy, RoomScopedState {
     }
 
     const resultado: TriviaTurnResult = {
-      playerId: player.id,
-      playerName: player.name,
+      playerId: turn.playerId,
+      playerName: match.currentPlayerName,
       teamId: turn.teamId,
       opcionElegida: opcionIndex,
       correcta,
       puntos,
     };
 
-    this.emit({
-      type: 'trivia_turn_result',
+    const turnResult = {
       code,
       pregunta: question.pregunta,
       opciones: question.opciones,
       indiceCorrecto: question.indiceCorrecto,
       resultado,
-    });
+    };
+    match.lastTurnResult = turnResult;
+    this.emit({ type: 'trivia_turn_result', ...turnResult });
 
     match.timer = null;
     this.scheduler(() => this.advanceOrFinish(code), TURN_TRANSITION_DELAY_MS);
@@ -315,6 +398,7 @@ export class TriviaService implements OnModuleDestroy, RoomScopedState {
     }));
 
     this.matches.delete(code);
+    this.finishedScores.set(code, scores);
     this.emit({ type: 'room_state', code, room });
     this.emit({ type: 'trivia_match_result', code, scores });
     this.scheduleReturnToSelection(code);
@@ -325,11 +409,19 @@ export class TriviaService implements OnModuleDestroy, RoomScopedState {
   // team.score (el marcador se acumula entre partidas).
   private scheduleReturnToSelection(code: string): void {
     this.scheduler(() => {
+      this.finishedScores.delete(code);
       const room = this.rooms.getRoom(code);
       if (!room) return;
       room.currentGame = null;
       this.emit({ type: 'room_state', code, room });
     }, RESULTS_DISPLAY_MS);
+  }
+
+  private turnTargets(code: string, playerId: string): string[] {
+    const socketId = this.rooms
+      .getRoom(code)
+      ?.players.find((p) => p.id === playerId)?.socketId;
+    return socketId ? [screenRoomName(code), socketId] : [screenRoomName(code)];
   }
 
   private emit(event: TriviaEvent): void {

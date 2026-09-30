@@ -5,7 +5,7 @@ import {
   ROOM_LIFECYCLE_CONFIG,
   type RoomLifecycleConfig,
 } from './room-lifecycle.config.js';
-import type { RoomScopedState } from './room-scoped-state.js';
+import type { GameSnapshotEvent, RoomScopedState } from './room-scoped-state.js';
 import { GAME_IDS, type GameId, type Player, type RoomState, type Team } from './room.types.js';
 
 // Sin 0/O ni 1/I — se leen y se dictan en voz alta entre celular y pantalla.
@@ -109,6 +109,13 @@ export class RoomService {
   // dependencia circular).
   registerRoomScoped(service: RoomScopedState): void {
     this.roomScoped.push(service);
+  }
+
+  // Lo que necesita ver un jugador que reconecta, según el juego en curso.
+  getSnapshot(code: string, playerId: string): GameSnapshotEvent[] {
+    return this.roomScoped.flatMap(
+      (service) => service.snapshotFor?.(code, playerId) ?? [],
+    );
   }
 
   getStats(): { rooms: number } {
@@ -364,7 +371,8 @@ export class RoomService {
     for (const team of room.teams) {
       team.playerIds = [];
     }
-    const shuffled = [...room.players];
+    // Solo los conectados: no se mete en un equipo a alguien que no está.
+    const shuffled = room.players.filter((p) => p.connected);
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];

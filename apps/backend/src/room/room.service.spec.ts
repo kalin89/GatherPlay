@@ -189,6 +189,28 @@ describe('RoomService', () => {
     });
   });
 
+  describe('snapshot de reconexión', () => {
+    it('concatena lo de los servicios que lo implementan e ignora los demás', () => {
+      const room = service.createRoom();
+      service.registerRoomScoped({ disposeRoom: () => undefined });
+      service.registerRoomScoped({
+        disposeRoom: () => undefined,
+        snapshotFor: (code, playerId) => [
+          { event: 'a', payload: { code, playerId } },
+        ],
+      });
+      service.registerRoomScoped({
+        disposeRoom: () => undefined,
+        snapshotFor: () => [{ event: 'b', payload: 1 }],
+      });
+
+      expect(service.getSnapshot(room.code, 'p1')).toEqual([
+        { event: 'a', payload: { code: room.code, playerId: 'p1' } },
+        { event: 'b', payload: 1 },
+      ]);
+    });
+  });
+
   describe('armado de equipos', () => {
     it('crea un equipo sin jugadores', () => {
       const room = service.createRoom();
@@ -278,6 +300,21 @@ describe('RoomService', () => {
       for (const team of updated.teams) {
         expect(team.playerIds.length).toBeGreaterThanOrEqual(2);
       }
+    });
+
+    it('el reparto al azar deja fuera a los jugadores desconectados', () => {
+      const room = service.createRoom();
+      service.joinRoom(room.code, 'Ana', 'socket-1');
+      const { player: beto } = service.joinRoom(room.code, 'Beto', 'socket-2');
+      service.joinRoom(room.code, 'Cami', 'socket-3');
+      service.createTeam(room.code, 'Rojos', '#FF0000');
+      service.markPlayerDisconnected('socket-2');
+
+      const updated = service.randomizeTeams(room.code);
+
+      const assigned = updated.teams.flatMap((t) => t.playerIds);
+      expect(assigned).toHaveLength(2);
+      expect(assigned).not.toContain(beto.id);
     });
 
     it('lanza NoTeamsError al azar si no hay equipos creados', () => {
