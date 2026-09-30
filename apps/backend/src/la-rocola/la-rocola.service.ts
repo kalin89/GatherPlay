@@ -261,13 +261,27 @@ export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
       (remainingSeconds) => {
         this.emit({ type: 'rocola_answer_tick', code, remainingSeconds });
       },
-      () => this.handleSubmitAnswer(code, socketId, ''),
+      () => this.judgeAnswer(code, player.id, ''),
     );
     match.timer = timer;
     timer.start(ANSWER_SECONDS);
   }
 
   handleSubmitAnswer(code: string, socketId: string, texto: string): void {
+    const room = this.rooms.getRoomOrThrow(code);
+    const player = room.players.find((p) => p.socketId === socketId);
+    this.judgeAnswer(code, player?.id ?? null, texto, socketId);
+  }
+
+  // Recibe el `playerId`, no el socket: el timeout de respuesta lo captura al
+  // hacer buzz, y si el jugador reconecta mientras escribe su `socketId`
+  // cambia (ver `player-reconnection`).
+  private judgeAnswer(
+    code: string,
+    playerId: string | null,
+    texto: string,
+    socketIdForError: string = playerId ?? '',
+  ): void {
     const match = this.matches.get(code);
     if (!match) {
       throw new NoRocolaMatchError(code);
@@ -280,9 +294,9 @@ export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
     }
 
     const room = this.rooms.getRoomOrThrow(code);
-    const player = room.players.find((p) => p.socketId === socketId);
+    const player = room.players.find((p) => p.id === playerId);
     if (!player || player.id !== match.buzzedPlayerId) {
-      throw new NotYourAnswerError(player?.id ?? socketId);
+      throw new NotYourAnswerError(player?.id ?? socketIdForError);
     }
 
     match.timer?.stop();

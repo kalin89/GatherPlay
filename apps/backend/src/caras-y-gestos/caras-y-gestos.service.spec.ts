@@ -40,8 +40,8 @@ interface RoomSetup {
 
 function createRoomWithTwoSoloTeams(rooms: RoomService): RoomSetup {
   const room = rooms.createRoom();
-  const withA = rooms.joinRoom(room.code, 'Ana', 'socket-a');
-  const withB = rooms.joinRoom(room.code, 'Beto', 'socket-b');
+  const withA = rooms.joinRoom(room.code, 'Ana', 'socket-a').room;
+  const withB = rooms.joinRoom(room.code, 'Beto', 'socket-b').room;
   const withTeamA = rooms.createTeam(room.code, 'Rojos', '#FF0000');
   const withTeamB = rooms.createTeam(room.code, 'Azules', '#0000FF');
   const playerAId = withA.players[0]!.id;

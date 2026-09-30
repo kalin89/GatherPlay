@@ -34,7 +34,9 @@ Criterios del motor de sala (Fase 1 de tasks.md): crear sala, generar código, u
 - **Given** un código de sala válido en estado `lobby`, **when** un jugador se une con un nombre, **then** se agrega a la lista de jugadores de esa sala y todos los clientes conectados a esa sala reciben la lista actualizada.
 - **Given** un código de sala que no existe, **when** un jugador intenta unirse con ese código, **then** recibe un error y no se agrega a ninguna sala.
 - **Given** dos jugadores uniéndose a la misma sala al mismo tiempo, **when** ambos envían su solicitud de unión, **then** ambos quedan registrados sin pisarse entre sí (sin condición de carrera que pierda a uno de los dos).
-- **Given** un jugador conectado a una sala, **when** pierde la conexión (cierra la pestaña o se corta el WebSocket), **then** se remueve de la lista de jugadores y el resto de los clientes ven la lista actualizada. (Reconexión con el mismo código sin perder el lugar es Fase 4 — fuera de esta tarea.)
+- **Given** un jugador en una sala, **when** pierde la conexión, **then** aparece como desconectado pero conserva su equipo durante la gracia; el resto de los clientes ven el cambio.
+- **Given** un jugador desconectado dentro de la gracia, **when** su celular vuelve a conectar con el mismo código, **then** recupera su lugar, su equipo y ve el estado actual del juego.
+- **Given** un jugador desconectado, **when** vence la gracia, **then** se remueve de la lista de jugadores y de su equipo, y el resto de los clientes ven la lista actualizada.
 
 ### Ciclo de vida de la sala
 

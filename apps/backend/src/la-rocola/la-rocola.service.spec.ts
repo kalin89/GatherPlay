@@ -65,26 +65,36 @@ function alwaysAvailableProvider(): SongPreviewProvider {
 
 interface RoomSetup {
   room: RoomState;
-  teamA: { teamId: string; playerId: string; socketId: string };
-  teamB: { teamId: string; playerId: string; socketId: string };
+  teamA: { teamId: string; playerId: string; socketId: string; playerToken: string };
+  teamB: { teamId: string; playerId: string; socketId: string; playerToken: string };
 }
 
 function createRoomWithTwoSoloTeams(rooms: RoomService): RoomSetup {
   const room = rooms.createRoom();
-  const withA = rooms.joinRoom(room.code, 'Ana', 'socket-a');
-  const withB = rooms.joinRoom(room.code, 'Beto', 'socket-b');
+  const joinedA = rooms.joinRoom(room.code, 'Ana', 'socket-a');
+  const joinedB = rooms.joinRoom(room.code, 'Beto', 'socket-b');
   const withTeamA = rooms.createTeam(room.code, 'Rojos', '#FF0000');
   const withTeamB = rooms.createTeam(room.code, 'Azules', '#0000FF');
-  const playerAId = withA.players[0]!.id;
-  const playerBId = withB.players[1]!.id;
+  const playerAId = joinedA.player.id;
+  const playerBId = joinedB.player.id;
   const teamAId = withTeamA.teams[0]!.id;
   const teamBId = withTeamB.teams[1]!.id;
   rooms.assignPlayerToTeam(room.code, playerAId, teamAId);
   rooms.assignPlayerToTeam(room.code, playerBId, teamBId);
   return {
     room,
-    teamA: { teamId: teamAId, playerId: playerAId, socketId: 'socket-a' },
-    teamB: { teamId: teamBId, playerId: playerBId, socketId: 'socket-b' },
+    teamA: {
+      teamId: teamAId,
+      playerId: playerAId,
+      socketId: 'socket-a',
+      playerToken: joinedA.playerToken,
+    },
+    teamB: {
+      teamId: teamBId,
+      playerId: playerBId,
+      socketId: 'socket-b',
+      playerToken: joinedB.playerToken,
+    },
   };
 }
 
@@ -243,6 +253,21 @@ describe('LaRocolaService', () => {
     expect(() =>
       laRocola.handleSubmitAnswer(setup.room.code, setup.teamB.socketId, CORRECT_ANSWER),
     ).toThrow(NotYourAnswerError);
+  });
+
+  it('si el jugador reconecta (cambia su socketId) mientras escribe, el timeout de respuesta igual se juzga', async () => {
+    const setup = createRoomWithTwoSoloTeams(rooms);
+    const laRocola = createLaRocola();
+    const events: LaRocolaEvent[] = [];
+    laRocola.events$.subscribe((e) => events.push(e));
+    await startAndReachSonando(laRocola, setup);
+    laRocola.handleBuzz(setup.room.code, setup.teamA.socketId);
+
+    rooms.rejoinRoom(setup.room.code, setup.teamA.playerToken, 'socket-a-nuevo');
+
+    await vi.advanceTimersByTimeAsync(ANSWER_SECONDS * 1000);
+
+    expect(eventsOfType(events, 'rocola_robo_started')).toHaveLength(1);
   });
 
   it('enviar una respuesta sin ninguna ronda de escritura pendiente no hace nada', async () => {
@@ -407,9 +432,9 @@ describe('LaRocolaService', () => {
 
   it('con 3 equipos, el robo lista a los dos equipos rivales', async () => {
     const room = rooms.createRoom();
-    const withA = rooms.joinRoom(room.code, 'Ana', 'socket-a');
-    const withB = rooms.joinRoom(room.code, 'Beto', 'socket-b');
-    const withC = rooms.joinRoom(room.code, 'Cami', 'socket-c');
+    const withA = rooms.joinRoom(room.code, 'Ana', 'socket-a').room;
+    const withB = rooms.joinRoom(room.code, 'Beto', 'socket-b').room;
+    const withC = rooms.joinRoom(room.code, 'Cami', 'socket-c').room;
     const withTeamA = rooms.createTeam(room.code, 'Rojos', '#FF0000');
     const withTeamB = rooms.createTeam(room.code, 'Azules', '#0000FF');
     const withTeamC = rooms.createTeam(room.code, 'Verdes', '#00FF00');

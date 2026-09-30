@@ -196,10 +196,11 @@ describe('GameEngineService', () => {
     },
   );
 
-  it('si todos los jugadores se desconectan, el temporizador se detiene sin round_result', () => {
+  it('si todos los jugadores se van (vence su gracia), el temporizador se detiene sin round_result', () => {
     const room = createRoomWithPlayerAndTeams(rooms);
     service.startRound(room.code, 10);
-    rooms.removePlayerBySocketId('socket-1');
+    rooms.markPlayerDisconnected('socket-1', 0);
+    rooms.removeExpiredPlayers(Number.MAX_SAFE_INTEGER);
 
     const events: GameEngineEvent[] = [];
     service.events$.subscribe((e) => events.push(e));

@@ -7,6 +7,10 @@ export interface RoomLifecycleConfig {
   maxRooms: number;
   /** Cada cuánto se revisa qué salas expiraron. */
   sweepIntervalMs: number;
+  /** Cuánto se conserva a un jugador desconectado con un juego en curso. */
+  playerGraceMs: number;
+  /** Ídem, en el lobby (sin juego elegido): más corta, no hay partida que proteger. */
+  lobbyPlayerGraceMs: number;
 }
 
 export const ROOM_LIFECYCLE_CONFIG = Symbol('ROOM_LIFECYCLE_CONFIG');
@@ -16,6 +20,8 @@ export const DEFAULT_ROOM_LIFECYCLE_CONFIG: RoomLifecycleConfig = {
   maxAgeMs: 12 * 60 * 60 * 1000,
   maxRooms: 200,
   sweepIntervalMs: 30 * 1000,
+  playerGraceMs: 90 * 1000,
+  lobbyPlayerGraceMs: 30 * 1000,
 };
 
 const ENV_VARIABLES = {
@@ -23,6 +29,8 @@ const ENV_VARIABLES = {
   maxAgeMs: 'ROOM_MAX_AGE_MS',
   maxRooms: 'MAX_ROOMS',
   sweepIntervalMs: 'ROOM_SWEEP_INTERVAL_MS',
+  playerGraceMs: 'PLAYER_GRACE_MS',
+  lobbyPlayerGraceMs: 'PLAYER_LOBBY_GRACE_MS',
 } as const satisfies Record<keyof RoomLifecycleConfig, string>;
 
 // Falla al arrancar ante un valor inválido en vez de caer en silencio al

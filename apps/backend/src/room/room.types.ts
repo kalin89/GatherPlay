@@ -2,6 +2,7 @@ export interface Player {
   id: string;
   name: string;
   socketId: string;
+  connected: boolean;
 }
 
 export interface Team {

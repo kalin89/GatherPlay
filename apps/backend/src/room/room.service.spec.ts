@@ -1,7 +1,9 @@
+import { DEFAULT_ROOM_LIFECYCLE_CONFIG } from './room-lifecycle.config.js';
 import {
   GameAlreadyStartedError,
   NoTeamsError,
   PlayerNotFoundError,
+  RejoinFailedError,
   RoomNotFoundError,
   RoomService,
   TeamNotFoundError,
@@ -35,7 +37,7 @@ describe('RoomService', () => {
   it('permite unirse con un código válido', () => {
     const room = service.createRoom();
 
-    const updated = service.joinRoom(room.code, 'Ana', 'socket-1');
+    const updated = service.joinRoom(room.code, 'Ana', 'socket-1').room;
 
     expect(updated.players).toHaveLength(1);
     expect(updated.players[0]).toMatchObject({
@@ -54,27 +56,137 @@ describe('RoomService', () => {
     const room = service.createRoom();
 
     service.joinRoom(room.code, 'Ana', 'socket-1');
-    const updated = service.joinRoom(room.code, 'Beto', 'socket-2');
+    const updated = service.joinRoom(room.code, 'Beto', 'socket-2').room;
 
     expect(updated.players.map((p) => p.name)).toEqual(['Ana', 'Beto']);
   });
 
-  it('remueve un jugador por su socketId y devuelve la sala actualizada', () => {
-    const room = service.createRoom();
-    service.joinRoom(room.code, 'Ana', 'socket-1');
+  describe('desconexión y reconexión de jugadores', () => {
+    const CONFIG = {
+      ...DEFAULT_ROOM_LIFECYCLE_CONFIG,
+      playerGraceMs: 90_000,
+      lobbyPlayerGraceMs: 30_000,
+    };
+    let svc: RoomService;
 
-    const updated = service.removePlayerBySocketId('socket-1');
+    beforeEach(() => {
+      svc = new RoomService(CONFIG);
+    });
 
-    expect(updated?.code).toBe(room.code);
-    expect(updated?.players).toEqual([]);
-  });
+    function roomWithTeamedPlayer() {
+      const room = svc.createRoom();
+      const { player, playerToken } = svc.joinRoom(room.code, 'Ana', 'socket-1');
+      const team = svc.createTeam(room.code, 'Rojos', '#FF0000').teams[0]!;
+      svc.assignPlayerToTeam(room.code, player.id, team.id);
+      return { room, player, playerToken, team };
+    }
 
-  it('no hace nada si el socketId a remover no pertenece a ninguna sala', () => {
-    service.createRoom();
+    it('joinRoom devuelve un token y el jugador entra conectado', () => {
+      const room = svc.createRoom();
 
-    const result = service.removePlayerBySocketId('inexistente');
+      const { player, playerToken } = svc.joinRoom(room.code, 'Ana', 'socket-1');
 
-    expect(result).toBeUndefined();
+      expect(playerToken).toEqual(expect.any(String));
+      expect(player.connected).toBe(true);
+    });
+
+    it('el token nunca aparece en el estado serializable de la sala', () => {
+      const { room, playerToken } = roomWithTeamedPlayer();
+
+      expect(JSON.stringify(room)).not.toContain(playerToken);
+    });
+
+    it('al desconectarse, el jugador se conserva con su equipo', () => {
+      const { room, player, team } = roomWithTeamedPlayer();
+
+      const updated = svc.markPlayerDisconnected('socket-1');
+
+      expect(updated?.code).toBe(room.code);
+      expect(updated?.players).toHaveLength(1);
+      expect(updated?.players[0]?.connected).toBe(false);
+      expect(updated?.teams[0]?.playerIds).toEqual([player.id]);
+      expect(team.playerIds).toEqual([player.id]);
+    });
+
+    it('no hace nada si el socketId no pertenece a ninguna sala', () => {
+      svc.createRoom();
+
+      expect(svc.markPlayerDisconnected('inexistente')).toBeUndefined();
+    });
+
+    it('rejoinRoom con token válido restaura el mismo jugador con el socket nuevo', () => {
+      const { room, player, playerToken } = roomWithTeamedPlayer();
+      svc.markPlayerDisconnected('socket-1');
+
+      const result = svc.rejoinRoom(room.code, playerToken, 'socket-2');
+
+      expect(result.player.id).toBe(player.id);
+      expect(result.player.socketId).toBe('socket-2');
+      expect(result.player.connected).toBe(true);
+      expect(result.previousSocketId).toBeNull();
+      expect(result.room.teams[0]?.playerIds).toEqual([player.id]);
+    });
+
+    it('rejoinRoom con el jugador aún conectado devuelve el socket anterior (pestaña duplicada)', () => {
+      const { room, playerToken } = roomWithTeamedPlayer();
+
+      const result = svc.rejoinRoom(room.code, playerToken, 'socket-2');
+
+      expect(result.previousSocketId).toBe('socket-1');
+    });
+
+    it('rejoinRoom lanza RejoinFailedError con token inválido o sala inexistente', () => {
+      const { room, playerToken } = roomWithTeamedPlayer();
+
+      expect(() => svc.rejoinRoom(room.code, 'nope', 'socket-2')).toThrow(
+        RejoinFailedError,
+      );
+      expect(() => svc.rejoinRoom('ZZZZZ', playerToken, 'socket-2')).toThrow(
+        RejoinFailedError,
+      );
+    });
+
+    it('el token de una sala no sirve en otra', () => {
+      const { playerToken } = roomWithTeamedPlayer();
+      const other = svc.createRoom();
+
+      expect(() => svc.rejoinRoom(other.code, playerToken, 'socket-2')).toThrow(
+        RejoinFailedError,
+      );
+    });
+
+    it('vencida la gracia de lobby, el jugador sale de la sala y de su equipo', () => {
+      const { room, playerToken } = roomWithTeamedPlayer();
+      svc.markPlayerDisconnected('socket-1', 1000);
+
+      expect(svc.removeExpiredPlayers(1000 + 29_999)).toEqual([]);
+      expect(svc.removeExpiredPlayers(1000 + 30_000)).toEqual([room.code]);
+
+      expect(room.players).toEqual([]);
+      expect(room.teams[0]?.playerIds).toEqual([]);
+      expect(() => svc.rejoinRoom(room.code, playerToken, 'socket-2')).toThrow(
+        RejoinFailedError,
+      );
+    });
+
+    it('con un juego elegido aplica la gracia larga', () => {
+      const { room } = roomWithTeamedPlayer();
+      svc.selectGame(room.code, 'trivia');
+      svc.markPlayerDisconnected('socket-1', 1000);
+
+      expect(svc.removeExpiredPlayers(1000 + 30_000)).toEqual([]);
+      expect(svc.removeExpiredPlayers(1000 + 90_000)).toEqual([room.code]);
+      expect(room.players).toEqual([]);
+    });
+
+    it('un jugador que vuelve a tiempo ya no expira', () => {
+      const { room, playerToken } = roomWithTeamedPlayer();
+      svc.markPlayerDisconnected('socket-1', 1000);
+      svc.rejoinRoom(room.code, playerToken, 'socket-2');
+
+      expect(svc.removeExpiredPlayers(1000 + 999_999)).toEqual([]);
+      expect(room.players).toHaveLength(1);
+    });
   });
 
   describe('armado de equipos', () => {
@@ -100,7 +212,7 @@ describe('RoomService', () => {
 
     it('asigna manualmente un jugador a un equipo', () => {
       const room = service.createRoom();
-      const withPlayer = service.joinRoom(room.code, 'Ana', 'socket-1');
+      const withPlayer = service.joinRoom(room.code, 'Ana', 'socket-1').room;
       const playerId = withPlayer.players[0].id;
       const withTeam = service.createTeam(room.code, 'Rojos', '#FF0000');
       const teamId = withTeam.teams[0].id;
@@ -112,7 +224,7 @@ describe('RoomService', () => {
 
     it('mueve al jugador de equipo si ya estaba en otro', () => {
       const room = service.createRoom();
-      const withPlayer = service.joinRoom(room.code, 'Ana', 'socket-1');
+      const withPlayer = service.joinRoom(room.code, 'Ana', 'socket-1').room;
       const playerId = withPlayer.players[0].id;
       service.createTeam(room.code, 'Rojos', '#FF0000');
       const withSecondTeam = service.createTeam(room.code, 'Azules', '#0000FF');
@@ -141,7 +253,7 @@ describe('RoomService', () => {
 
     it('lanza TeamNotFoundError al asignar a un equipo inexistente', () => {
       const room = service.createRoom();
-      const withPlayer = service.joinRoom(room.code, 'Ana', 'socket-1');
+      const withPlayer = service.joinRoom(room.code, 'Ana', 'socket-1').room;
       const playerId = withPlayer.players[0].id;
 
       expect(() =>
@@ -187,7 +299,7 @@ describe('RoomService', () => {
 
     it('elimina un equipo con jugadores y los deja sin equipo (siguen en la sala)', () => {
       const room = service.createRoom();
-      const withPlayer = service.joinRoom(room.code, 'Ana', 'socket-1');
+      const withPlayer = service.joinRoom(room.code, 'Ana', 'socket-1').room;
       const playerId = withPlayer.players[0].id;
       const withTeam = service.createTeam(room.code, 'Rojos', '#FF0000');
       const teamId = withTeam.teams[0].id;

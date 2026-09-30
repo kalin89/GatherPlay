@@ -21,13 +21,23 @@ describe('loadRoomLifecycleConfig', () => {
         ROOM_MAX_AGE_MS: '2000',
         MAX_ROOMS: '5',
         ROOM_SWEEP_INTERVAL_MS: '50',
+        PLAYER_GRACE_MS: '3000',
+        PLAYER_LOBBY_GRACE_MS: '400',
       }),
     ).toEqual({
       hostGraceMs: 1000,
       maxAgeMs: 2000,
       maxRooms: 5,
       sweepIntervalMs: 50,
+      playerGraceMs: 3000,
+      lobbyPlayerGraceMs: 400,
     });
+  });
+
+  it('lanza un error si la gracia de jugador es inválida', () => {
+    expect(() => loadRoomLifecycleConfig({ PLAYER_GRACE_MS: 'x' })).toThrow(
+      /PLAYER_GRACE_MS/,
+    );
   });
 
   it.each(['abc', '0', '-5', '1.5'])(

@@ -56,6 +56,8 @@ describe('Ciclo de vida de salas (e2e)', () => {
         maxAgeMs: 60_000,
         maxRooms: 100,
         sweepIntervalMs: 50,
+        playerGraceMs: 60_000,
+        lobbyPlayerGraceMs: 60_000,
       });
     });
 
@@ -148,6 +150,8 @@ describe('Ciclo de vida de salas (e2e)', () => {
         maxAgeMs: 60_000,
         maxRooms: 2,
         sweepIntervalMs: 50,
+        playerGraceMs: 60_000,
+        lobbyPlayerGraceMs: 60_000,
       });
     });
 

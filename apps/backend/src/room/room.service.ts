@@ -26,6 +26,13 @@ export class PlayerNotFoundError extends Error {
   }
 }
 
+export class RejoinFailedError extends Error {
+  constructor() {
+    super('No se pudo recuperar tu lugar en la sala, entra de nuevo con tu nombre');
+    this.name = 'RejoinFailedError';
+  }
+}
+
 export class TeamNotFoundError extends Error {
   constructor(teamId: string) {
     super(`No existe un equipo con el id ${teamId}`);
@@ -73,6 +80,11 @@ interface RoomMeta {
   hostlessSince: number | null;
   // Hubo un host y se perdió — distingue una reconexión de la primera conexión.
   hostLost: boolean;
+  // Token efímero → playerId. Nunca se serializa ni se difunde: quien lo tiene
+  // puede reclamar el lugar de ese jugador (ver `rejoinRoom`).
+  playerTokens: Map<string, string>;
+  // playerId → cuándo se desconectó, para vencer la gracia.
+  disconnectedAt: Map<string, number>;
 }
 
 @Injectable()
@@ -122,6 +134,8 @@ export class RoomService {
       hostSocketIds: new Set(),
       hostlessSince: now,
       hostLost: false,
+      playerTokens: new Map(),
+      disconnectedAt: new Map(),
     });
     return room;
   }
@@ -205,25 +219,90 @@ export class RoomService {
     this.rooms.delete(code);
   }
 
-  joinRoom(code: string, name: string, socketId: string): RoomState {
+  joinRoom(
+    code: string,
+    name: string,
+    socketId: string,
+  ): { room: RoomState; player: Player; playerToken: string } {
     const room = this.rooms.get(code);
-    if (!room) {
+    const meta = this.roomMeta.get(code);
+    if (!room || !meta) {
       throw new RoomNotFoundError(code);
     }
-    const player: Player = { id: randomUUID(), name, socketId };
+    const player: Player = { id: randomUUID(), name, socketId, connected: true };
+    const playerToken = randomUUID();
     room.players.push(player);
-    return room;
+    meta.playerTokens.set(playerToken, player.id);
+    return { room, player, playerToken };
   }
 
-  removePlayerBySocketId(socketId: string): RoomState | undefined {
-    for (const room of this.rooms.values()) {
-      const index = room.players.findIndex((p) => p.socketId === socketId);
-      if (index !== -1) {
-        room.players.splice(index, 1);
+  // El jugador se conserva (con su equipo) hasta que venza la gracia; ver
+  // `removeExpiredPlayers`.
+  markPlayerDisconnected(
+    socketId: string,
+    now: number = Date.now(),
+  ): RoomState | undefined {
+    for (const [code, room] of this.rooms) {
+      const player = room.players.find((p) => p.socketId === socketId);
+      if (player) {
+        player.connected = false;
+        this.roomMeta.get(code)?.disconnectedAt.set(player.id, now);
         return room;
       }
     }
     return undefined;
+  }
+
+  rejoinRoom(
+    code: string,
+    playerToken: string,
+    socketId: string,
+  ): { room: RoomState; player: Player; previousSocketId: string | null } {
+    const room = this.rooms.get(code);
+    const meta = this.roomMeta.get(code);
+    const playerId = meta?.playerTokens.get(playerToken);
+    const player = room?.players.find((p) => p.id === playerId);
+    if (!room || !meta || !player) {
+      throw new RejoinFailedError();
+    }
+    // Si seguía conectado con otro socket (pestaña duplicada), el gateway
+    // necesita saber cuál para expulsarlo.
+    const previousSocketId =
+      player.connected && player.socketId !== socketId ? player.socketId : null;
+    player.socketId = socketId;
+    player.connected = true;
+    meta.disconnectedAt.delete(player.id);
+    return { room, player, previousSocketId };
+  }
+
+  // Elimina a los desconectados cuya gracia venció y devuelve las salas
+  // afectadas para que el gateway difunda el nuevo estado. Recibe `now` para
+  // probarse sin timers.
+  removeExpiredPlayers(now: number = Date.now()): string[] {
+    const affected: string[] = [];
+    for (const [code, meta] of this.roomMeta) {
+      const room = this.rooms.get(code);
+      if (!room) continue;
+      const graceMs =
+        room.currentGame === null
+          ? this.config.lobbyPlayerGraceMs
+          : this.config.playerGraceMs;
+      let changed = false;
+      for (const [playerId, since] of meta.disconnectedAt) {
+        if (now - since < graceMs) continue;
+        meta.disconnectedAt.delete(playerId);
+        for (const [token, id] of meta.playerTokens) {
+          if (id === playerId) meta.playerTokens.delete(token);
+        }
+        room.players = room.players.filter((p) => p.id !== playerId);
+        for (const team of room.teams) {
+          team.playerIds = team.playerIds.filter((id) => id !== playerId);
+        }
+        changed = true;
+      }
+      if (changed) affected.push(code);
+    }
+    return affected;
   }
 
   getRoom(code: string): RoomState | undefined {

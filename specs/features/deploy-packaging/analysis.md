@@ -47,7 +47,7 @@ Inventario completo (todas con valor por defecto sensato en local; en producció
 | `DATABASE_URL` | backend | ya existe | Solo si se confirma Postgres (ver discrepancia). |
 | `CORS_ORIGINS` | backend | `server-hardening` | Lista separada por comas. |
 | `ROOM_EMPTY_TTL_MS`, `ROOM_MAX_AGE_MS`, `ROOM_HOST_GRACE_MS`, `MAX_ROOMS` | backend | `room-lifecycle` | |
-| `PLAYER_GRACE_MS`, `MAX_PLAYERS_PER_ROOM` | backend | `player-reconnection`, `server-hardening` | |
+| `PLAYER_GRACE_MS`, `PLAYER_LOBBY_GRACE_MS`, `MAX_PLAYERS_PER_ROOM` | backend | `player-reconnection`, `server-hardening` | Gracia de reconexión con juego en curso (90 s) y en lobby (30 s). |
 | `RATE_LIMIT_*`, `AI_MAX_PER_ROOM_HOUR`, `AI_MAX_GLOBAL_HOUR` | backend | `server-hardening` | |
 | `TRUST_PROXY_HOPS` | backend | `server-hardening` | Número de proxies delante del backend. |
 | `LOG_LEVEL` | backend | `server-hardening` | |

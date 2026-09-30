@@ -85,6 +85,6 @@ Es la parte que **no** se puede automatizar y la razón de esta tarea. En celula
 
 Por la regla de "Tamaño de las tareas", se divide en backend y frontend, secuenciales:
 
-- [ ] **Backend — identidad y estado desconectado:** token, `connected`, gracia por jugador, `rejoin_room`, evento `joined`, `replaced`. Pruebas unitarias + e2e de sala.
+- [x] **Backend — identidad y estado desconectado:** token, `connected`, gracia por jugador, `rejoin_room`, evento `joined`, `replaced`. Pruebas unitarias + e2e de sala. Implementación: la gracia vence con el **barrido** existente de `RoomGateway` (no hay timer por jugador), así que la gracia real es la configurada + hasta `sweepIntervalMs` (30 s). Variables: `PLAYER_GRACE_MS` (90 s) y `PLAYER_LOBBY_GRACE_MS` (30 s). `joined` se emite **después** de la difusión de `room_state` para no alterar el orden de llegada que asumen las pruebas e2e. El timeout de respuesta de La Rocola pasó a juzgar por `playerId` (el `socketId` cambia al reconectar).
 - [ ] **Backend — resincronización:** `getSnapshot` en `GameEngineService` y Trivia (mecanismo de referencia); luego Caras y Gestos, Adivina la palabra, La Rocola y Memoriza los objetos, cada uno cerrable por separado. Ajuste de `ReadyGate` y `randomizeTeams`.
 - [ ] **Frontend:** `useJoinRoom` con token en `sessionStorage`, `rejoin_room` en `connect`, atenuado de jugadores desconectados en `/screen`, mensaje de "reconectando" en `/play`. Depende de las dos anteriores.

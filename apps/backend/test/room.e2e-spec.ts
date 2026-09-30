@@ -88,7 +88,7 @@ describe('RoomGateway (e2e)', () => {
     expect(error.message).toBeTruthy();
   });
 
-  it('al desconectarse un jugador, el resto ve el estado actualizado', async () => {
+  it('al desconectarse un jugador, el resto lo ve como desconectado sin perder su lugar', async () => {
     const host = connect();
     const roomCreated = waitFor<RoomState>(host, 'room_state');
     host.on('connect', () => host.emit('create_room'));
@@ -105,7 +105,8 @@ describe('RoomGateway (e2e)', () => {
     player.disconnect();
 
     const hostState = await hostSeesDisconnect;
-    expect(hostState.players).toEqual([]);
+    expect(hostState.players).toHaveLength(1);
+    expect(hostState.players[0]).toMatchObject({ name: 'Ana', connected: false });
   });
 
   it('el host crea equipos y asigna jugadores manualmente', async () => {

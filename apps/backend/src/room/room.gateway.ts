@@ -12,6 +12,7 @@ import {
   GameAlreadyStartedError,
   NoTeamsError,
   PlayerNotFoundError,
+  RejoinFailedError,
   RoomNotFoundError,
   RoomService,
   TeamNotFoundError,
@@ -22,6 +23,11 @@ import {
 interface JoinRoomPayload {
   code: string;
   name: string;
+}
+
+interface RejoinRoomPayload {
+  code: string;
+  playerToken: string;
 }
 
 interface CreateTeamPayload {
@@ -95,6 +101,13 @@ export class RoomGateway
       this.server.to(code).emit('room_closed', { reason });
       this.server.in(code).socketsLeave([code, screenRoomName(code)]);
     }
+    // Las salas recién cerradas ya no existen, así que no se les difunde nada.
+    for (const code of this.roomService.removeExpiredPlayers()) {
+      const room = this.roomService.getRoom(code);
+      if (room) {
+        this.server.to(code).emit('room_state', room);
+      }
+    }
   }
 
   @SubscribeMessage('create_room')
@@ -118,16 +131,51 @@ export class RoomGateway
     @ConnectedSocket() client: Socket,
   ) {
     try {
-      const room = this.roomService.joinRoom(
+      const { room, player, playerToken } = this.roomService.joinRoom(
         payload.code,
         payload.name,
         client.id,
       );
       void client.join(room.code);
       this.server.to(room.code).emit('room_state', room);
+      // El token va solo a este socket: en `room_state` lo verían todos. Se
+      // emite después de la difusión para no alterar el orden en que ya
+      // llegan los `room_state`.
+      client.emit('joined', { playerId: player.id, playerToken });
     } catch (error) {
       if (error instanceof RoomNotFoundError) {
         client.emit('error', { message: error.message });
+        return;
+      }
+      throw error;
+    }
+  }
+
+  @SubscribeMessage('rejoin_room')
+  handleRejoinRoom(
+    @MessageBody() payload: RejoinRoomPayload,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const { room, player, previousSocketId } = this.roomService.rejoinRoom(
+        payload.code,
+        payload.playerToken,
+        client.id,
+      );
+      if (previousSocketId) {
+        const previous = this.server.sockets.sockets.get(previousSocketId);
+        previous?.emit('replaced');
+        previous?.disconnect(true);
+      }
+      void client.join(room.code);
+      client.emit('joined', {
+        playerId: player.id,
+        playerToken: payload.playerToken,
+      });
+      this.server.to(room.code).emit('room_state', room);
+    } catch (error) {
+      if (error instanceof RejoinFailedError) {
+        client.emit('error', { code: 'REJOIN_FAILED', message: error.message });
         return;
       }
       throw error;
@@ -259,7 +307,7 @@ export class RoomGateway
   }
 
   handleDisconnect(client: Socket) {
-    const room = this.roomService.removePlayerBySocketId(client.id);
+    const room = this.roomService.markPlayerDisconnected(client.id);
     if (room) {
       this.server.to(room.code).emit('room_state', room);
     }

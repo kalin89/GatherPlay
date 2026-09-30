@@ -11,6 +11,8 @@ const CONFIG: RoomLifecycleConfig = {
   maxAgeMs: 10_000,
   maxRooms: 3,
   sweepIntervalMs: 50,
+  playerGraceMs: 1000,
+  lobbyPlayerGraceMs: 500,
 };
 
 describe('RoomService — ciclo de vida', () => {
