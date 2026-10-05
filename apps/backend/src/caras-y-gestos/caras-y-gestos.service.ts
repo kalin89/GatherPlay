@@ -1,7 +1,7 @@
 import { Injectable, OnModuleDestroy, Optional } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { RoomService } from '../room/room.service.js';
-import type { RoomScopedState } from '../room/room-scoped-state.js';
+import type { GameSnapshotEvent, RoomScopedState } from '../room/room-scoped-state.js';
 import { screenRoomName } from '../room/room.gateway.js';
 import { GameEngineService } from '../game-engine/game-engine.service.js';
 import { AiContentService } from '../ai-content/ai-content.service.js';
@@ -68,6 +68,17 @@ interface GestosMatchState {
   // Puntos ganados en ESTA partida (para el resultado final) — distinto de
   // team.score, que es el acumulado de por vida.
   matchScores: Map<string, number>;
+  // Nombre del actor del turno en curso: puede vencer su gracia y salir de
+  // `room.players`, y el resultado/snapshot no debe depender de encontrarlo.
+  currentPlayerName: string;
+  // Resultado del turno ya resuelto, mientras dura la pausa antes del
+  // siguiente; null durante un turno.
+  lastTurnResult: GestoTurnResult | null;
+}
+
+interface FinishedMatchResult {
+  scores: TeamScore[];
+  palabrasPorEquipo: Record<string, string[]>;
 }
 
 const ROUNDS_PER_PLAYER = 3;
@@ -100,6 +111,9 @@ export class CarasYGestosService implements OnModuleDestroy, RoomScopedState {
   // si se reinicia el backend. Sobrevive a cada partida individual (no se
   // borra en finishMatch), a diferencia de `matches`.
   private readonly usedWords = new Map<string, Set<string>>();
+  // Resultado final de la partida que acaba de terminar, mientras dura la
+  // pantalla de resultados (para quien reconecta en ese lapso).
+  private readonly finishedResults = new Map<string, FinishedMatchResult>();
   private readonly eventsSubject = new Subject<CarasYGestosEvent>();
   readonly events$: Observable<CarasYGestosEvent> = this.eventsSubject.asObservable();
 
@@ -125,6 +139,62 @@ export class CarasYGestosService implements OnModuleDestroy, RoomScopedState {
     this.matches.get(code)?.timer?.stop();
     this.matches.delete(code);
     this.usedWords.delete(code);
+    this.finishedResults.delete(code);
+  }
+
+  // Lo que necesita ver un jugador que reconecta. Nunca incluye la palabra:
+  // esa solo va a la pantalla (`gestos_turn_started` / `gestos_word_update`).
+  snapshotFor(code: string, playerId: string): GameSnapshotEvent[] {
+    const match = this.matches.get(code);
+    if (!match) {
+      const result = this.finishedResults.get(code);
+      return result
+        ? [{ event: 'gestos_match_result', payload: { code, ...result } }]
+        : [];
+    }
+    if (match.wordPool.length === 0) {
+      return [];
+    }
+    if (match.lastTurnResult) {
+      return [
+        {
+          event: 'gestos_turn_result',
+          payload: { code, resultado: match.lastTurnResult },
+        },
+      ];
+    }
+
+    const turn = match.turns[match.currentIndex]!;
+    if (match.phase === 'active' && turn.playerId === playerId) {
+      return [{ event: 'gestos_actor_ready', payload: { code } }];
+    }
+    return [
+      {
+        event: 'gestos_turn_waiting',
+        payload: {
+          code,
+          playerId: turn.playerId,
+          playerName: match.currentPlayerName,
+          teamId: turn.teamId,
+        },
+      },
+    ];
+  }
+
+  // Si el actor que todavía no presionaba "Iniciar" venció su gracia, el turno
+  // no tiene temporizador que lo resuelva: se salta. En fase activa no hace
+  // falta, el reloj del turno lo resuelve solo.
+  onPlayersRemoved(code: string, playerIds: string[]): void {
+    const match = this.matches.get(code);
+    if (!match || match.wordPool.length === 0) return;
+    const turn = match.turns[match.currentIndex]!;
+    if (
+      match.phase === 'waiting' &&
+      !match.lastTurnResult &&
+      playerIds.includes(turn.playerId)
+    ) {
+      this.advanceOrFinish(code);
+    }
   }
 
   onModuleDestroy(): void {
@@ -153,7 +223,10 @@ export class CarasYGestosService implements OnModuleDestroy, RoomScopedState {
       timer: null,
       guessedByTeam: new Map(room.teams.map((team) => [team.id, []])),
       matchScores: new Map(room.teams.map((team) => [team.id, 0])),
+      currentPlayerName: '',
+      lastTurnResult: null,
     });
+    this.finishedResults.delete(code);
 
     this.emit({ type: 'room_state', code, room });
     void this.loadWordPoolAndStartFirstTurn(code, turns.length);
@@ -306,7 +379,14 @@ export class CarasYGestosService implements OnModuleDestroy, RoomScopedState {
 
     const room = this.rooms.getRoomOrThrow(code);
     const turn = match.turns[match.currentIndex]!;
-    const player = room.players.find((p) => p.id === turn.playerId)!;
+    const player = room.players.find((p) => p.id === turn.playerId);
+    // Pudo vencer su gracia antes de que le llegara el turno: se salta.
+    if (!player) {
+      this.advanceOrFinish(code);
+      return;
+    }
+    match.currentPlayerName = player.name;
+    match.lastTurnResult = null;
 
     this.emit({
       type: 'gestos_turn_waiting',
@@ -324,13 +404,11 @@ export class CarasYGestosService implements OnModuleDestroy, RoomScopedState {
     match.timer?.stop();
     match.timer = null;
 
-    const room = this.rooms.getRoomOrThrow(code);
     const turn = match.turns[match.currentIndex]!;
-    const player = room.players.find((p) => p.id === turn.playerId)!;
 
     const resultado: GestoTurnResult = {
-      playerId: player.id,
-      playerName: player.name,
+      playerId: turn.playerId,
+      playerName: match.currentPlayerName,
       teamId: turn.teamId,
       palabrasAdivinadas: match.turnGuessed,
       puntos: match.turnGuessed.length * WORD_POINT,
@@ -338,6 +416,7 @@ export class CarasYGestosService implements OnModuleDestroy, RoomScopedState {
     };
 
     match.turnWords = null;
+    match.lastTurnResult = resultado;
 
     this.emit({ type: 'gestos_turn_result', code, resultado });
 
@@ -375,6 +454,7 @@ export class CarasYGestosService implements OnModuleDestroy, RoomScopedState {
     }
 
     this.matches.delete(code);
+    this.finishedResults.set(code, { scores, palabrasPorEquipo });
     this.emit({ type: 'room_state', code, room });
     this.emit({ type: 'gestos_match_result', code, scores, palabrasPorEquipo });
     this.scheduleReturnToSelection(code);
@@ -386,6 +466,7 @@ export class CarasYGestosService implements OnModuleDestroy, RoomScopedState {
   // palabras ya usadas siguen excluidas mientras la sala exista).
   private scheduleReturnToSelection(code: string): void {
     this.scheduler(() => {
+      this.finishedResults.delete(code);
       const room = this.rooms.getRoom(code);
       if (!room) return;
       room.currentGame = null;

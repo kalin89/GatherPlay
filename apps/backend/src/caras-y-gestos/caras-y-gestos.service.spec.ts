@@ -479,4 +479,159 @@ describe('CarasYGestosService', () => {
       }).not.toThrow();
     });
   });
+
+  describe('reconexión: snapshotFor y jugadores eliminados', () => {
+    const FAR_FUTURE = Date.now() + 10 * 60_000;
+
+    async function waitingMatch() {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const gestos = createCarasYGestos();
+      const events: CarasYGestosEvent[] = [];
+      gestos.events$.subscribe((e) => events.push(e));
+      gestos.startMatch(setup.room.code);
+      await vi.advanceTimersByTimeAsync(0);
+      const current = currentTurnPlayer(events, setup);
+      const other = current === setup.teamA ? setup.teamB : setup.teamA;
+      return { setup, gestos, events, current, other };
+    }
+
+    // Saca a `player` de la sala por el camino real: desconexión + gracia vencida.
+    function expire(player: { socketId: string }) {
+      rooms.markPlayerDisconnected(player.socketId, 0);
+      rooms.removeExpiredPlayers(FAR_FUTURE);
+    }
+
+    it('devuelve vacío sin partida ni resultados, y mientras se cargan las palabras', () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const gestos = createCarasYGestos();
+
+      expect(gestos.snapshotFor(setup.room.code, setup.teamA.playerId)).toEqual([]);
+
+      gestos.startMatch(setup.room.code);
+      expect(gestos.snapshotFor(setup.room.code, setup.teamA.playerId)).toEqual([]);
+    });
+
+    it('en fase de espera todos reciben gestos_turn_waiting (el actor lo usa para volver a ver "Iniciar")', async () => {
+      const { setup, gestos, current, other } = await waitingMatch();
+
+      for (const player of [current, other]) {
+        const snapshot = gestos.snapshotFor(setup.room.code, player.playerId);
+        expect(snapshot).toEqual([
+          {
+            event: 'gestos_turn_waiting',
+            payload: {
+              code: setup.room.code,
+              playerId: current.playerId,
+              playerName: current === setup.teamA ? 'Ana' : 'Beto',
+              teamId: current.teamId,
+            },
+          },
+        ]);
+      }
+    });
+
+    it('con el turno activo, el actor recibe gestos_actor_ready y el resto gestos_turn_waiting; nadie recibe la palabra', async () => {
+      const { setup, gestos, events, current, other } = await waitingMatch();
+      gestos.startTurn(setup.room.code, current.socketId);
+      const [started] = turnStartedEvents(events);
+      const palabra = (started as { palabra: string }).palabra;
+
+      const actorSnapshot = gestos.snapshotFor(setup.room.code, current.playerId);
+      const otherSnapshot = gestos.snapshotFor(setup.room.code, other.playerId);
+
+      expect(actorSnapshot).toEqual([
+        { event: 'gestos_actor_ready', payload: { code: setup.room.code } },
+      ]);
+      expect(otherSnapshot.map((e) => e.event)).toEqual(['gestos_turn_waiting']);
+      // Ninguna palabra del turno viaja en ningún snapshot de jugador.
+      const words = (
+        gestos as unknown as {
+          matches: Map<string, { turnWords: string[] }>;
+        }
+      ).matches.get(setup.room.code)!.turnWords;
+      expect(words).toContain(palabra);
+      for (const snapshot of [actorSnapshot, otherSnapshot]) {
+        for (const word of words) {
+          expect(JSON.stringify(snapshot)).not.toContain(word);
+        }
+      }
+    });
+
+    it('entre turnos devuelve el resultado del turno ya resuelto', async () => {
+      const { setup, gestos, current } = await waitingMatch();
+      gestos.startTurn(setup.room.code, current.socketId);
+      await vi.advanceTimersByTimeAsync(TURN_SECONDS * 1000);
+
+      const snapshot = gestos.snapshotFor(setup.room.code, current.playerId);
+
+      expect(snapshot.map((e) => e.event)).toEqual(['gestos_turn_result']);
+      expect(snapshot[0]!.payload).toMatchObject({
+        code: setup.room.code,
+        resultado: { playerId: current.playerId, motivo: 'tiempo' },
+      });
+    });
+
+    it('al terminar la partida devuelve el resultado final hasta volver a la selección', async () => {
+      const { setup, gestos, events } = await waitingMatch();
+      for (let turn = 0; turn < 6; turn++) {
+        gestos.startTurn(
+          setup.room.code,
+          currentTurnPlayer(events, setup).socketId,
+        );
+        await vi.advanceTimersByTimeAsync(
+          TURN_SECONDS * 1000 + TURN_TRANSITION_DELAY_MS,
+        );
+      }
+
+      const snapshot = gestos.snapshotFor(setup.room.code, setup.teamA.playerId);
+      expect(snapshot.map((e) => e.event)).toEqual(['gestos_match_result']);
+      expect(snapshot[0]!.payload).toMatchObject({
+        code: setup.room.code,
+        palabrasPorEquipo: expect.any(Object),
+      });
+
+      await vi.advanceTimersByTimeAsync(RESULTS_DISPLAY_MS);
+      expect(gestos.snapshotFor(setup.room.code, setup.teamA.playerId)).toEqual([]);
+    });
+
+    it('si el actor vence su gracia sin haber presionado "Iniciar", se salta al siguiente', async () => {
+      const { setup, events, current, other } = await waitingMatch();
+
+      expire(current);
+
+      const waiting = turnWaitingEvents(events);
+      expect(waiting).toHaveLength(2);
+      expect(waiting[1]).toMatchObject({ playerId: other.playerId });
+    });
+
+    it('si el actor vence su gracia con el turno activo, el reloj lo resuelve con su nombre y sin excepción', async () => {
+      const { setup, gestos, events, current } = await waitingMatch();
+      gestos.startTurn(setup.room.code, current.socketId);
+
+      expire(current);
+      await vi.advanceTimersByTimeAsync(TURN_SECONDS * 1000);
+
+      expect(turnResultEvents(events)[0]).toMatchObject({
+        resultado: {
+          playerId: current.playerId,
+          playerName: current === setup.teamA ? 'Ana' : 'Beto',
+          motivo: 'tiempo',
+        },
+      });
+    });
+
+    it('si el jugador del siguiente turno ya no está, se salta su turno', async () => {
+      const { setup, gestos, events, current, other } = await waitingMatch();
+      gestos.startTurn(setup.room.code, current.socketId);
+      expire(other);
+
+      await vi.advanceTimersByTimeAsync(
+        TURN_SECONDS * 1000 + TURN_TRANSITION_DELAY_MS,
+      );
+
+      // El turno siguiente era de `other` (eliminado): le vuelve a tocar a `current`.
+      const waiting = turnWaitingEvents(events);
+      expect(waiting.at(-1)).toMatchObject({ playerId: current.playerId });
+    });
+  });
 });

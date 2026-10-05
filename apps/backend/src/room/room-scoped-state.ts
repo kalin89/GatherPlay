@@ -16,4 +16,8 @@ export interface RoomScopedState {
   // lo que le corresponde ahora (ver specs/features/player-reconnection).
   // No debe incluir contenido secreto que no sea suyo.
   snapshotFor?(code: string, playerId: string): GameSnapshotEvent[];
+  // Opcional: avisa que estos jugadores vencieron su gracia y salieron de la
+  // sala, para que un juego que estaba esperando a alguno de ellos (ej. el
+  // actor que nunca presionó "Iniciar") no quede congelado.
+  onPlayersRemoved?(code: string, playerIds: string[]): void;
 }

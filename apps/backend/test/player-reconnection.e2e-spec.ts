@@ -162,13 +162,19 @@ describe('Reconexión de jugadores (e2e)', () => {
     expect((await failure).code).toBe('REJOIN_FAILED');
   });
 
-  it('con Trivia en curso, quien reconecta recibe el estado del turno y solo el jugador en turno ve la pregunta', async () => {
+  interface TeamedPlayer extends Joined {
+    socket: Socket;
+  }
+
+  // Sala con dos jugadores, cada uno solo en su equipo, con el juego elegido y
+  // la pantalla unida a `${code}:screen` (watch_room).
+  async function roomWithTwoTeamedPlayers(gameId: string) {
     const screen = connect();
     const created = waitFor<RoomState>(screen, 'room_state');
     screen.on('connect', () => screen.emit('create_room'));
     const { code } = await created;
 
-    async function join(name: string) {
+    async function join(name: string): Promise<TeamedPlayer> {
       const socket = connect();
       const joined = waitFor<Joined>(socket, 'joined');
       socket.on('connect', () => socket.emit('join_room', { code, name }));
@@ -185,46 +191,40 @@ describe('Reconexión de jugadores (e2e)', () => {
       screen.emit('create_team', { code, name, color });
       await made;
     }
-    const teams = await new Promise<RoomState>((resolve) => {
+    const withTeams = await new Promise<RoomState>((resolve) => {
       screen.once('room_state', resolve);
       screen.emit('watch_room', { code });
     });
     for (const [player, team] of [
-      [ana, teams.teams[0]!],
-      [beto, teams.teams[1]!],
+      [ana, withTeams.teams[0]!],
+      [beto, withTeams.teams[1]!],
     ] as const) {
       const assigned = waitFor<RoomState>(screen, 'room_state');
-      screen.emit('assign_team', {
-        code,
-        playerId: player.playerId,
-        teamId: team.id,
-      });
+      screen.emit('assign_team', { code, playerId: player.playerId, teamId: team.id });
       await assigned;
     }
     const selected = waitFor<RoomState>(screen, 'room_state');
-    screen.emit('select_game', { code, gameId: 'trivia' });
+    screen.emit('select_game', { code, gameId });
     await selected;
 
-    const started = Promise.race([
-      waitFor<{ playerId: string }>(ana.socket, 'trivia_turn_started'),
-      waitFor<{ playerId: string }>(beto.socket, 'trivia_turn_started'),
-    ]);
-    screen.emit('start_trivia_game', { code });
-    const { playerId: turnPlayerId } = await started;
+    return { screen, code, ana, beto };
+  }
 
-    // Ambos pierden la conexión y vuelven dentro de la gracia (400 ms).
-    ana.socket.disconnect();
-    beto.socket.disconnect();
+  // Ambos pierden la conexión y vuelven dentro de la gracia (400 ms),
+  // registrando lo que reciben de los eventos `events` tras el rejoin.
+  async function disconnectAndComeBack(
+    code: string,
+    players: TeamedPlayer[],
+    events: string[],
+  ) {
+    for (const player of players) player.socket.disconnect();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    async function comeBack(player: { playerToken: string }) {
+    const results: { event: string; payload: any }[][] = [];
+    for (const player of players) {
       const socket = connect();
       const received: { event: string; payload: any }[] = [];
-      for (const event of [
-        'trivia_turn_waiting',
-        'trivia_turn_started',
-        'trivia_turn_update',
-      ]) {
+      for (const event of events) {
         socket.on(event, (payload) => received.push({ event, payload }));
       }
       const joined = waitFor<Joined>(socket, 'joined');
@@ -233,15 +233,31 @@ describe('Reconexión de jugadores (e2e)', () => {
       );
       await joined;
       await new Promise((resolve) => setTimeout(resolve, 150));
-      return received;
+      results.push(received);
     }
-    const anaEvents = await comeBack(ana);
-    const betoEvents = await comeBack(beto);
+    return results;
+  }
+
+  it('con Trivia en curso, quien reconecta recibe el estado del turno y solo el jugador en turno ve la pregunta', async () => {
+    const { screen, code, ana, beto } = await roomWithTwoTeamedPlayers('trivia');
+
+    const started = Promise.race([
+      waitFor<{ playerId: string }>(ana.socket, 'trivia_turn_started'),
+      waitFor<{ playerId: string }>(beto.socket, 'trivia_turn_started'),
+    ]);
+    screen.emit('start_trivia_game', { code });
+    const { playerId: turnPlayerId } = await started;
+
+    const [anaEvents, betoEvents] = await disconnectAndComeBack(
+      code,
+      [ana, beto],
+      ['trivia_turn_waiting', 'trivia_turn_started', 'trivia_turn_update'],
+    );
 
     const [inTurn, notInTurn] =
       turnPlayerId === ana.playerId
-        ? [anaEvents, betoEvents]
-        : [betoEvents, anaEvents];
+        ? [anaEvents!, betoEvents!]
+        : [betoEvents!, anaEvents!];
     expect(inTurn.map((e) => e.event)).toEqual([
       'trivia_turn_waiting',
       'trivia_turn_started',
@@ -250,5 +266,73 @@ describe('Reconexión de jugadores (e2e)', () => {
     expect(inTurn[1]!.payload.opciones).toHaveLength(4);
     expect(notInTurn.map((e) => e.event)).toEqual(['trivia_turn_waiting']);
     expect(JSON.stringify(notInTurn)).not.toContain('opciones');
+  });
+
+  it('con Caras y Gestos en curso, el actor recupera sus botones y nadie recibe la palabra', async () => {
+    const { screen, code, ana, beto } =
+      await roomWithTwoTeamedPlayers('caras-y-gestos');
+
+    const waiting = waitFor<{ playerId: string }>(screen, 'gestos_turn_waiting');
+    screen.emit('start_gestos_game', { code });
+    const actorId = (await waiting).playerId;
+    const [actor, other] = actorId === ana.playerId ? [ana, beto] : [beto, ana];
+
+    const actorReady = waitFor(actor.socket, 'gestos_actor_ready');
+    actor.socket.emit('start_gestos_turn', { code });
+    await actorReady;
+
+    const [anaEvents, betoEvents] = await disconnectAndComeBack(
+      code,
+      [ana, beto],
+      [
+        'gestos_turn_waiting',
+        'gestos_actor_ready',
+        'gestos_turn_started',
+        'gestos_word_update',
+      ],
+    );
+
+    const [actorEvents, otherEvents] =
+      actor === ana ? [anaEvents!, betoEvents!] : [betoEvents!, anaEvents!];
+    expect(actorEvents.map((e) => e.event)).toEqual(['gestos_actor_ready']);
+    expect(otherEvents.map((e) => e.event)).toEqual(['gestos_turn_waiting']);
+    expect(other.playerId).not.toBe(actor.playerId);
+  });
+
+  it('con Adivina la palabra en curso, el Adivinador recupera su estado y nadie recibe la palabra', async () => {
+    const { screen, code, ana, beto } =
+      await roomWithTwoTeamedPlayers('adivina-palabra');
+
+    const waiting = waitFor<{ playerId: string }>(screen, 'adivina_turn_waiting');
+    screen.emit('start_adivina_palabra_game', { code });
+    const guesserId = (await waiting).playerId;
+    const guesser = guesserId === ana.playerId ? ana : beto;
+
+    const active = waitFor(guesser.socket, 'adivina_jugador_estado');
+    guesser.socket.emit('adivina_ready', { code });
+    await active;
+
+    const [anaEvents, betoEvents] = await disconnectAndComeBack(
+      code,
+      [ana, beto],
+      ['adivina_turn_waiting', 'adivina_jugador_estado', 'adivina_pantalla_estado'],
+    );
+
+    const [guesserEvents, otherEvents] =
+      guesser === ana ? [anaEvents!, betoEvents!] : [betoEvents!, anaEvents!];
+    expect(guesserEvents[0]!.event).toBe('adivina_jugador_estado');
+    expect(guesserEvents[0]!.payload).toMatchObject({ pasesRestantes: 3 });
+    expect(guesserEvents[0]!.payload).not.toHaveProperty('palabra');
+    // Los ticks siguen llegando al Adivinador; lo que no puede llegarle a nadie
+    // es la pantalla, que es la única que lleva la palabra.
+    expect(
+      [...guesserEvents, ...otherEvents].some(
+        (e) => e.event === 'adivina_pantalla_estado',
+      ),
+    ).toBe(false);
+    expect(otherEvents[0]!.event).toBe('adivina_turn_waiting');
+    expect(
+      otherEvents.some((e) => e.event === 'adivina_jugador_estado'),
+    ).toBe(false);
   });
 });

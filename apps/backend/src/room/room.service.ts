@@ -294,10 +294,11 @@ export class RoomService {
         room.currentGame === null
           ? this.config.lobbyPlayerGraceMs
           : this.config.playerGraceMs;
-      let changed = false;
+      const removedIds: string[] = [];
       for (const [playerId, since] of meta.disconnectedAt) {
         if (now - since < graceMs) continue;
         meta.disconnectedAt.delete(playerId);
+        removedIds.push(playerId);
         for (const [token, id] of meta.playerTokens) {
           if (id === playerId) meta.playerTokens.delete(token);
         }
@@ -305,9 +306,13 @@ export class RoomService {
         for (const team of room.teams) {
           team.playerIds = team.playerIds.filter((id) => id !== playerId);
         }
-        changed = true;
       }
-      if (changed) affected.push(code);
+      if (removedIds.length > 0) {
+        affected.push(code);
+        for (const service of this.roomScoped) {
+          service.onPlayersRemoved?.(code, removedIds);
+        }
+      }
     }
     return affected;
   }

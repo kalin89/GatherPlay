@@ -1,7 +1,7 @@
 import { Injectable, OnModuleDestroy, Optional } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { RoomService } from '../room/room.service.js';
-import type { RoomScopedState } from '../room/room-scoped-state.js';
+import type { GameSnapshotEvent, RoomScopedState } from '../room/room-scoped-state.js';
 import { screenRoomName } from '../room/room.gateway.js';
 import { GameEngineService } from '../game-engine/game-engine.service.js';
 import { AiContentService } from '../ai-content/ai-content.service.js';
@@ -85,6 +85,17 @@ interface AdivinaMatchState {
   matchWords: Map<string, string[]>;
   timer: RoundTimer | null;
   phase: 'waiting_ready' | 'active';
+  // Nombre del Adivinador del turno en curso: puede vencer su gracia y salir de
+  // `room.players`, y el resultado/snapshot no debe depender de encontrarlo.
+  currentPlayerName: string;
+  // Resultado del turno ya resuelto, hasta que el siguiente Adivinador
+  // presiona "Listo"; null durante un turno y en el primer turno.
+  lastTurnResult: AdivinaTurnResult | null;
+}
+
+interface FinishedMatchResult {
+  scores: TeamScore[];
+  palabrasPorEquipo: { teamId: string; palabras: string[] }[];
 }
 
 const ROUNDS_PER_PLAYER = 3;
@@ -115,6 +126,9 @@ export class AdivinaPalabraService implements OnModuleDestroy, RoomScopedState {
   // reinicia el backend. Sobrevive a cada partida individual (no se borra en
   // finishMatch), a diferencia de `matches`.
   private readonly roomWords = new Map<string, RoomWordState>();
+  // Resultado final de la partida que acaba de terminar, mientras dura la
+  // pantalla de resultados (para quien reconecta en ese lapso).
+  private readonly finishedResults = new Map<string, FinishedMatchResult>();
   private readonly eventsSubject = new Subject<AdivinaPalabraEvent>();
   readonly events$: Observable<AdivinaPalabraEvent> = this.eventsSubject.asObservable();
 
@@ -141,6 +155,69 @@ export class AdivinaPalabraService implements OnModuleDestroy, RoomScopedState {
     this.matches.get(code)?.timer?.stop();
     this.matches.delete(code);
     this.roomWords.delete(code);
+    this.finishedResults.delete(code);
+  }
+
+  // Lo que necesita ver un jugador que reconecta. Nunca incluye la palabra: esa
+  // solo va a la pantalla (`adivina_pantalla_estado`), ni siquiera al Adivinador.
+  snapshotFor(code: string, playerId: string): GameSnapshotEvent[] {
+    const match = this.matches.get(code);
+    if (!match) {
+      const result = this.finishedResults.get(code);
+      return result
+        ? [{ event: 'adivina_match_result', payload: { code, ...result } }]
+        : [];
+    }
+
+    const turn = match.turns[match.currentIndex]!;
+    const waiting: GameSnapshotEvent = {
+      event: 'adivina_turn_waiting',
+      payload: {
+        code,
+        playerId: turn.playerId,
+        playerName: match.currentPlayerName,
+        teamId: turn.teamId,
+        marcador: this.marcador(code, match),
+      },
+    };
+
+    if (match.phase === 'waiting_ready') {
+      // Tras un turno, el reducer arma "resumen + siguiente jugador" con el
+      // resultado seguido del waiting, igual que en vivo.
+      return match.lastTurnResult
+        ? [
+            {
+              event: 'adivina_turn_result',
+              payload: { code, resultado: match.lastTurnResult },
+            },
+            waiting,
+          ]
+        : [waiting];
+    }
+    if (turn.playerId === playerId) {
+      return [
+        {
+          event: 'adivina_jugador_estado',
+          payload: {
+            code,
+            remainingSeconds: match.remainingSeconds,
+            pasesRestantes: MAX_PASSES_PER_TURN - match.passCount,
+          },
+        },
+      ];
+    }
+    return [waiting];
+  }
+
+  // Si el Adivinador que todavía no presionaba "Listo" venció su gracia, el
+  // turno no tiene temporizador que lo resuelva: se salta. En fase activa no
+  // hace falta, el reloj del turno lo resuelve solo.
+  onPlayersRemoved(code: string, playerIds: string[]): void {
+    const match = this.matches.get(code);
+    if (!match || match.phase !== 'waiting_ready') return;
+    if (playerIds.includes(match.turns[match.currentIndex]!.playerId)) {
+      this.advanceOrFinish(code);
+    }
   }
 
   onModuleDestroy(): void {
@@ -178,7 +255,10 @@ export class AdivinaPalabraService implements OnModuleDestroy, RoomScopedState {
       matchWords: new Map(room.teams.map((team) => [team.id, []])),
       timer: null,
       phase: 'waiting_ready',
+      currentPlayerName: '',
+      lastTurnResult: null,
     });
+    this.finishedResults.delete(code);
 
     this.emit({ type: 'room_state', code, room });
     this.emitTurnWaiting(code);
@@ -210,6 +290,7 @@ export class AdivinaPalabraService implements OnModuleDestroy, RoomScopedState {
     match.currentWord = match.queue.shift() ?? null;
     match.remainingSeconds = ADIVINA_TURN_SECONDS;
     match.phase = 'active';
+    match.lastTurnResult = null;
 
     const timer = new RoundTimer(
       (remainingSeconds) => {
@@ -331,7 +412,7 @@ export class AdivinaPalabraService implements OnModuleDestroy, RoomScopedState {
 
     const room = this.rooms.getRoomOrThrow(code);
     const turn = match.turns[match.currentIndex]!;
-    const player = room.players.find((p) => p.id === turn.playerId)!;
+    const player = room.players.find((p) => p.id === turn.playerId);
     const pasesRestantes = MAX_PASSES_PER_TURN - match.passCount;
 
     this.emit({
@@ -343,13 +424,24 @@ export class AdivinaPalabraService implements OnModuleDestroy, RoomScopedState {
       pasesRestantes,
       ultimaAccion,
     });
-    this.emit({
-      type: 'adivina_jugador_estado',
-      code,
-      targetSocketIds: [player.socketId],
-      remainingSeconds: match.remainingSeconds,
-      pasesRestantes,
-    });
+    // Si el Adivinador ya salió de la sala, el reloj sigue y resuelve el turno;
+    // solo no hay a quién mandarle su estado.
+    if (player) {
+      this.emit({
+        type: 'adivina_jugador_estado',
+        code,
+        targetSocketIds: [player.socketId],
+        remainingSeconds: match.remainingSeconds,
+        pasesRestantes,
+      });
+    }
+  }
+
+  private marcador(code: string, match: AdivinaMatchState): TeamScore[] {
+    return this.rooms.getRoomOrThrow(code).teams.map((team) => ({
+      teamId: team.id,
+      score: match.matchScores.get(team.id) ?? 0,
+    }));
   }
 
   private emitTurnWaiting(code: string): void {
@@ -358,11 +450,13 @@ export class AdivinaPalabraService implements OnModuleDestroy, RoomScopedState {
 
     const room = this.rooms.getRoomOrThrow(code);
     const turn = match.turns[match.currentIndex]!;
-    const player = room.players.find((p) => p.id === turn.playerId)!;
-    const marcador: TeamScore[] = room.teams.map((team) => ({
-      teamId: team.id,
-      score: match.matchScores.get(team.id) ?? 0,
-    }));
+    const player = room.players.find((p) => p.id === turn.playerId);
+    // Pudo vencer su gracia antes de que le llegara el turno: se salta.
+    if (!player) {
+      this.advanceOrFinish(code);
+      return;
+    }
+    match.currentPlayerName = player.name;
 
     this.emit({
       type: 'adivina_turn_waiting',
@@ -370,7 +464,7 @@ export class AdivinaPalabraService implements OnModuleDestroy, RoomScopedState {
       playerId: player.id,
       playerName: player.name,
       teamId: turn.teamId,
-      marcador,
+      marcador: this.marcador(code, match),
     });
   }
 
@@ -381,9 +475,7 @@ export class AdivinaPalabraService implements OnModuleDestroy, RoomScopedState {
     match.timer?.stop();
     match.timer = null;
 
-    const room = this.rooms.getRoomOrThrow(code);
     const turn = match.turns[match.currentIndex]!;
-    const player = room.players.find((p) => p.id === turn.playerId)!;
 
     // Si quedó una palabra a medio mostrar sin resolver, cuenta como pasada
     // (roja) — pero no contra el límite de pases voluntarios del jugador.
@@ -402,15 +494,23 @@ export class AdivinaPalabraService implements OnModuleDestroy, RoomScopedState {
     match.matchWords.set(turn.teamId, [...previousWords, ...match.guessed]);
 
     const resultado: AdivinaTurnResult = {
-      playerId: player.id,
-      playerName: player.name,
+      playerId: turn.playerId,
+      playerName: match.currentPlayerName,
       teamId: turn.teamId,
       adivinadas: match.guessed,
       pasadas: match.passed,
       puntos,
     };
 
+    match.lastTurnResult = resultado;
     this.emit({ type: 'adivina_turn_result', code, resultado });
+
+    this.advanceOrFinish(code);
+  }
+
+  private advanceOrFinish(code: string): void {
+    const match = this.matches.get(code);
+    if (!match) return;
 
     if (match.currentIndex + 1 < match.turns.length) {
       match.currentIndex++;
@@ -444,6 +544,7 @@ export class AdivinaPalabraService implements OnModuleDestroy, RoomScopedState {
     }));
 
     this.matches.delete(code);
+    this.finishedResults.set(code, { scores, palabrasPorEquipo });
     this.emit({ type: 'room_state', code, room });
     this.emit({ type: 'adivina_match_result', code, scores, palabrasPorEquipo });
     this.scheduleReturnToSelection(code);
@@ -455,6 +556,7 @@ export class AdivinaPalabraService implements OnModuleDestroy, RoomScopedState {
   // vivos para la próxima partida de este juego en esta sala).
   private scheduleReturnToSelection(code: string): void {
     this.scheduler(() => {
+      this.finishedResults.delete(code);
       const room = this.rooms.getRoom(code);
       if (!room) return;
       room.currentGame = null;

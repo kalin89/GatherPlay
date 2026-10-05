@@ -483,4 +483,175 @@ describe('AdivinaPalabraService', () => {
       }).not.toThrow();
     });
   });
+
+  describe('reconexión: snapshotFor y jugadores eliminados', () => {
+    const FAR_FUTURE = Date.now() + 10 * 60_000;
+
+    async function waitingMatch() {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const adivina = createAdivinaPalabra();
+      const events: AdivinaPalabraEvent[] = [];
+      adivina.events$.subscribe((e) => events.push(e));
+      await adivina.startMatch(setup.room.code);
+      const current = currentTurnPlayer(events, setup);
+      const other = current === setup.teamA ? setup.teamB : setup.teamA;
+      return { setup, adivina, events, current, other };
+    }
+
+    // Saca a `player` de la sala por el camino real: desconexión + gracia vencida.
+    function expire(player: { socketId: string }) {
+      rooms.markPlayerDisconnected(player.socketId, 0);
+      rooms.removeExpiredPlayers(FAR_FUTURE);
+    }
+
+    it('devuelve vacío si la sala no tiene partida ni resultados', () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const adivina = createAdivinaPalabra();
+
+      expect(adivina.snapshotFor(setup.room.code, setup.teamA.playerId)).toEqual([]);
+    });
+
+    it('en el primer turno, esperando "Listo", todos reciben adivina_turn_waiting con el marcador', async () => {
+      const { setup, adivina, current, other } = await waitingMatch();
+
+      for (const player of [current, other]) {
+        const snapshot = adivina.snapshotFor(setup.room.code, player.playerId);
+        expect(snapshot).toEqual([
+          {
+            event: 'adivina_turn_waiting',
+            payload: {
+              code: setup.room.code,
+              playerId: current.playerId,
+              playerName: current === setup.teamA ? 'Ana' : 'Beto',
+              teamId: current.teamId,
+              marcador: [
+                { teamId: setup.teamA.teamId, score: 0 },
+                { teamId: setup.teamB.teamId, score: 0 },
+              ],
+            },
+          },
+        ]);
+      }
+    });
+
+    it('con el turno activo, el Adivinador recibe su estado sin palabra y el resto adivina_turn_waiting; nadie recibe la palabra', async () => {
+      const { setup, adivina, current, other } = await waitingMatch();
+      adivina.markReady(setup.room.code, current.socketId);
+      await vi.advanceTimersByTimeAsync(4000);
+
+      const guesserSnapshot = adivina.snapshotFor(setup.room.code, current.playerId);
+      const otherSnapshot = adivina.snapshotFor(setup.room.code, other.playerId);
+
+      expect(guesserSnapshot).toEqual([
+        {
+          event: 'adivina_jugador_estado',
+          payload: {
+            code: setup.room.code,
+            remainingSeconds: ADIVINA_TURN_SECONDS - 4,
+            pasesRestantes: 3,
+          },
+        },
+      ]);
+      expect(otherSnapshot.map((e) => e.event)).toEqual(['adivina_turn_waiting']);
+
+      const state = (
+        adivina as unknown as {
+          matches: Map<string, { currentWord: string; queue: string[] }>;
+        }
+      ).matches.get(setup.room.code)!;
+      expect(state.currentWord).toBeTruthy();
+      for (const word of [state.currentWord, ...state.queue.slice(0, 20)]) {
+        expect(JSON.stringify([guesserSnapshot, otherSnapshot])).not.toContain(word);
+      }
+    });
+
+    it('tras un turno, mientras el siguiente no presiona "Listo", devuelve resultado + siguiente', async () => {
+      const { setup, adivina, current, other } = await waitingMatch();
+      adivina.markReady(setup.room.code, current.socketId);
+      await vi.advanceTimersByTimeAsync(ADIVINA_TURN_SECONDS * 1000);
+
+      const snapshot = adivina.snapshotFor(setup.room.code, other.playerId);
+
+      expect(snapshot.map((e) => e.event)).toEqual([
+        'adivina_turn_result',
+        'adivina_turn_waiting',
+      ]);
+      expect(snapshot[0]!.payload).toMatchObject({
+        code: setup.room.code,
+        resultado: { playerId: current.playerId },
+      });
+      expect(snapshot[1]!.payload).toMatchObject({ playerId: other.playerId });
+    });
+
+    it('cuando el siguiente presiona "Listo" el resultado anterior deja de ir en el snapshot', async () => {
+      const { setup, adivina, current, other } = await waitingMatch();
+      adivina.markReady(setup.room.code, current.socketId);
+      await vi.advanceTimersByTimeAsync(ADIVINA_TURN_SECONDS * 1000);
+      adivina.markReady(setup.room.code, other.socketId);
+
+      const snapshot = adivina.snapshotFor(setup.room.code, current.playerId);
+
+      expect(snapshot.map((e) => e.event)).toEqual(['adivina_turn_waiting']);
+    });
+
+    it('al terminar la partida devuelve el resultado final hasta volver a la selección', async () => {
+      const { setup, adivina, events } = await waitingMatch();
+      for (let turn = 0; turn < 6; turn++) {
+        adivina.markReady(setup.room.code, currentTurnPlayer(events, setup).socketId);
+        await vi.advanceTimersByTimeAsync(ADIVINA_TURN_SECONDS * 1000);
+      }
+
+      const snapshot = adivina.snapshotFor(setup.room.code, setup.teamA.playerId);
+      expect(snapshot.map((e) => e.event)).toEqual(['adivina_match_result']);
+      expect(snapshot[0]!.payload).toMatchObject({
+        code: setup.room.code,
+        palabrasPorEquipo: expect.any(Array),
+      });
+
+      await vi.advanceTimersByTimeAsync(RESULTS_DISPLAY_MS);
+      expect(adivina.snapshotFor(setup.room.code, setup.teamA.playerId)).toEqual([]);
+    });
+
+    it('si el Adivinador vence su gracia sin haber presionado "Listo", se salta al siguiente', async () => {
+      const { events, current, other } = await waitingMatch();
+
+      expire(current);
+
+      const waiting = turnWaitingEvents(events);
+      expect(waiting).toHaveLength(2);
+      expect(waiting[1]).toMatchObject({ playerId: other.playerId });
+    });
+
+    it('si el Adivinador vence su gracia con el turno activo, el reloj sigue y resuelve el turno con su nombre', async () => {
+      const { setup, adivina, events, current } = await waitingMatch();
+      adivina.markReady(setup.room.code, current.socketId);
+      expire(current);
+      const jugadorEventsBefore = jugadorEstadoEvents(events).length;
+
+      await vi.advanceTimersByTimeAsync(ADIVINA_TURN_SECONDS * 1000);
+
+      // La pantalla sigue recibiendo ticks; al jugador eliminado ya no se le manda nada.
+      expect(pantallaEstadoEvents(events).length).toBeGreaterThan(1);
+      expect(jugadorEstadoEvents(events)).toHaveLength(jugadorEventsBefore);
+      expect(turnResultEvents(events)[0]).toMatchObject({
+        resultado: {
+          playerId: current.playerId,
+          playerName: current === setup.teamA ? 'Ana' : 'Beto',
+        },
+      });
+    });
+
+    it('si el jugador del siguiente turno ya no está, se salta su turno', async () => {
+      const { setup, adivina, events, current, other } = await waitingMatch();
+      adivina.markReady(setup.room.code, current.socketId);
+      expire(other);
+
+      await vi.advanceTimersByTimeAsync(ADIVINA_TURN_SECONDS * 1000);
+
+      // El turno siguiente era de `other` (eliminado): le vuelve a tocar a `current`.
+      expect(turnWaitingEvents(events).at(-1)).toMatchObject({
+        playerId: current.playerId,
+      });
+    });
+  });
 });

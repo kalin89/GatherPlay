@@ -211,6 +211,28 @@ describe('RoomService', () => {
     });
   });
 
+  describe('aviso a los juegos de jugadores eliminados', () => {
+    it('llama onPlayersRemoved con los ids eliminados de esa sala y no si no hubo ninguno', () => {
+      const svc = new RoomService({
+        ...DEFAULT_ROOM_LIFECYCLE_CONFIG,
+        lobbyPlayerGraceMs: 30_000,
+      });
+      const onPlayersRemoved = vi.fn();
+      svc.registerRoomScoped({ disposeRoom: () => undefined, onPlayersRemoved });
+      const room = svc.createRoom();
+      const { player } = svc.joinRoom(room.code, 'Ana', 'socket-1');
+      svc.joinRoom(room.code, 'Beto', 'socket-2');
+      svc.markPlayerDisconnected('socket-1', 1000);
+
+      svc.removeExpiredPlayers(1000 + 29_999);
+      expect(onPlayersRemoved).not.toHaveBeenCalled();
+
+      svc.removeExpiredPlayers(1000 + 30_000);
+      expect(onPlayersRemoved).toHaveBeenCalledTimes(1);
+      expect(onPlayersRemoved).toHaveBeenCalledWith(room.code, [player.id]);
+    });
+  });
+
   describe('armado de equipos', () => {
     it('crea un equipo sin jugadores', () => {
       const room = service.createRoom();
