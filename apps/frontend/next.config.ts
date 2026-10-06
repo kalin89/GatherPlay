@@ -11,7 +11,9 @@ const nextConfig: NextConfig = {
   // laptop/TV (los celulares no pueden usar `localhost`), así que hay que
   // permitir explícitamente los rangos típicos de router doméstico.
   // Ref: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
-  allowedDevOrigins: ["192.168.*.*", "10.*.*.*"],
+  // `*.trycloudflare.com` es solo para pruebas con túnel (cloudflared) desde
+  // otra red; no aplica a un despliegue real, que no usa el dev server.
+  allowedDevOrigins: ["192.168.*.*", "10.*.*.*", "*.trycloudflare.com"],
 };
 
 export default nextConfig;

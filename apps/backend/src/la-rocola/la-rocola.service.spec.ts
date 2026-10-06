@@ -662,4 +662,329 @@ describe('LaRocolaService', () => {
       }).not.toThrow();
     });
   });
+
+  describe('reconexión: snapshotFor, ReadyGate y jugadores eliminados', () => {
+    const FAR_FUTURE = Date.now() + 10 * 60_000;
+
+    function collect(laRocola: LaRocolaService): LaRocolaEvent[] {
+      const events: LaRocolaEvent[] = [];
+      laRocola.events$.subscribe((e) => events.push(e));
+      return events;
+    }
+
+    function names(laRocola: LaRocolaService, setup: RoomSetup): string[] {
+      return laRocola.snapshotFor(setup.room.code, setup.teamA.playerId).map((e) => e.event);
+    }
+
+    async function reachCountdown(laRocola: LaRocolaService, setup: RoomSetup) {
+      laRocola.startMatch(setup.room.code);
+      await readyBoth(laRocola, setup);
+    }
+
+    async function reachSonando(laRocola: LaRocolaService, setup: RoomSetup) {
+      await reachCountdown(laRocola, setup);
+      await vi.advanceTimersByTimeAsync(COUNTDOWN_SECONDS * 1000);
+    }
+
+    it('devuelve vacío sin partida ni resultados', () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+
+      expect(laRocola.snapshotFor(setup.room.code, setup.teamA.playerId)).toEqual([]);
+    });
+
+    it('en waiting_ready manda rocola_ready_state con quién ya está listo', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+      laRocola.startMatch(setup.room.code);
+      await laRocola.markReady(setup.room.code, setup.teamA.socketId);
+
+      expect(laRocola.snapshotFor(setup.room.code, setup.teamB.playerId)).toEqual([
+        {
+          event: 'rocola_ready_state',
+          payload: {
+            code: setup.room.code,
+            readyPlayerIds: [setup.teamA.playerId],
+            eligiblePlayerIds: [setup.teamA.playerId, setup.teamB.playerId],
+          },
+        },
+      ]);
+    });
+
+    it('en la cuenta regresiva manda round_started y el tiempo restante real', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+      await reachCountdown(laRocola, setup);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      const snapshot = laRocola.snapshotFor(setup.room.code, setup.teamA.playerId);
+
+      expect(snapshot.map((e) => e.event)).toEqual([
+        'rocola_round_started',
+        'rocola_countdown_tick',
+      ]);
+      expect(snapshot[0]!.payload).toMatchObject({ roundNumber: 1, totalRounds: TOTAL_ROUNDS });
+      expect(snapshot[1]!.payload).toEqual({
+        code: setup.room.code,
+        remainingSeconds: COUNTDOWN_SECONDS - 2,
+      });
+    });
+
+    it('con la canción sonando manda buzzer_open y nunca previewUrl ni el título', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+      await reachSonando(laRocola, setup);
+
+      const snapshot = laRocola.snapshotFor(setup.room.code, setup.teamB.playerId);
+
+      expect(snapshot.map((e) => e.event)).toEqual(['rocola_round_started', 'rocola_buzzer_open']);
+      const serialized = JSON.stringify(snapshot);
+      expect(serialized).not.toContain('previewUrl');
+      expect(serialized).not.toContain('preview/');
+      expect(serialized).not.toContain(CORRECT_ANSWER);
+    });
+
+    it('respondiendo: manda quién ganó el buzzer (con su nombre) y el tiempo que queda', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+      await reachSonando(laRocola, setup);
+      laRocola.handleBuzz(setup.room.code, setup.teamA.socketId);
+      await vi.advanceTimersByTimeAsync(4000);
+
+      const snapshot = laRocola.snapshotFor(setup.room.code, setup.teamB.playerId);
+
+      expect(snapshot.map((e) => e.event)).toEqual([
+        'rocola_round_started',
+        'rocola_buzzer_locked',
+        'rocola_answer_tick',
+      ]);
+      expect(snapshot[1]!.payload).toEqual({
+        code: setup.room.code,
+        playerId: setup.teamA.playerId,
+        playerName: 'Ana',
+        teamId: setup.teamA.teamId,
+      });
+      expect(snapshot[2]!.payload).toEqual({
+        code: setup.room.code,
+        remainingSeconds: ANSWER_SECONDS - 4,
+      });
+    });
+
+    it('robo: manda los equipos elegibles con sus nombres y el tiempo restante', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+      await reachSonando(laRocola, setup);
+      laRocola.handleBuzz(setup.room.code, setup.teamA.socketId);
+      laRocola.handleSubmitAnswer(setup.room.code, setup.teamA.socketId, WRONG_ANSWER);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      const snapshot = laRocola.snapshotFor(setup.room.code, setup.teamB.playerId);
+
+      expect(snapshot.map((e) => e.event)).toEqual(['rocola_round_started', 'rocola_robo_started']);
+      expect(snapshot[1]!.payload).toEqual({
+        code: setup.room.code,
+        eligibleTeamIds: [setup.teamB.teamId],
+        eligibleTeamNames: ['Azules'],
+        remainingSeconds: ROBO_SECONDS - 2,
+      });
+    });
+
+    it('robo_respondiendo: robo_started + buzzer_locked + answer_tick, en ese orden', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+      await reachSonando(laRocola, setup);
+      laRocola.handleBuzz(setup.room.code, setup.teamA.socketId);
+      laRocola.handleSubmitAnswer(setup.room.code, setup.teamA.socketId, WRONG_ANSWER);
+      laRocola.handleBuzz(setup.room.code, setup.teamB.socketId);
+
+      const snapshot = laRocola.snapshotFor(setup.room.code, setup.teamA.playerId);
+
+      expect(snapshot.map((e) => e.event)).toEqual([
+        'rocola_round_started',
+        'rocola_robo_started',
+        'rocola_buzzer_locked',
+        'rocola_answer_tick',
+      ]);
+      expect(snapshot[2]!.payload).toMatchObject({
+        playerId: setup.teamB.playerId,
+        playerName: 'Beto',
+      });
+    });
+
+    it('en la revelación manda el resultado, con el marcador de inicio de ronda', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+      await reachSonando(laRocola, setup);
+      laRocola.handleBuzz(setup.room.code, setup.teamA.socketId);
+      laRocola.handleSubmitAnswer(setup.room.code, setup.teamA.socketId, CORRECT_ANSWER);
+
+      const snapshot = laRocola.snapshotFor(setup.room.code, setup.teamB.playerId);
+
+      expect(snapshot.map((e) => e.event)).toEqual(['rocola_round_started', 'rocola_round_result']);
+      // El reducer del frontend suma el punto de `resultado` sobre este marcador.
+      expect((snapshot[0]!.payload as { marcador: { score: number }[] }).marcador).toEqual([
+        { teamId: setup.teamA.teamId, score: 0 },
+        { teamId: setup.teamB.teamId, score: 0 },
+      ]);
+      expect(snapshot[1]!.payload).toMatchObject({
+        resultado: { teamId: setup.teamA.teamId, puntos: 1 },
+      });
+    });
+
+    it('terminada la partida manda rocola_match_result hasta volver a selección', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+      laRocola.startMatch(setup.room.code);
+      await readyBoth(laRocola, setup);
+      for (let round = 0; round < TOTAL_ROUNDS; round++) {
+        await vi.advanceTimersByTimeAsync(COUNTDOWN_SECONDS * 1000);
+        laRocola.handleBuzz(setup.room.code, setup.teamA.socketId);
+        laRocola.handleSubmitAnswer(setup.room.code, setup.teamA.socketId, CORRECT_ANSWER);
+        await vi.advanceTimersByTimeAsync(REVEAL_DISPLAY_MS);
+      }
+
+      const snapshot = laRocola.snapshotFor(setup.room.code, setup.teamB.playerId);
+      expect(snapshot.map((e) => e.event)).toEqual(['rocola_match_result']);
+      expect((snapshot[0]!.payload as { scores: unknown[] }).scores).toHaveLength(2);
+
+      await vi.advanceTimersByTimeAsync(RESULTS_DISPLAY_MS);
+      expect(laRocola.snapshotFor(setup.room.code, setup.teamB.playerId)).toEqual([]);
+    });
+
+    it('un desconectado deja de bloquear el Listo y de contar en el total', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+      const events = collect(laRocola);
+      laRocola.startMatch(setup.room.code);
+      await laRocola.markReady(setup.room.code, setup.teamA.socketId);
+
+      rooms.markPlayerDisconnected(setup.teamB.socketId);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const ready = eventsOfType(events, 'rocola_ready_state');
+      expect(ready.at(-1)).toMatchObject({
+        readyPlayerIds: [setup.teamA.playerId],
+        eligiblePlayerIds: [setup.teamA.playerId],
+      });
+      // Era el único que faltaba: la partida arranca sin esperarlo.
+      expect(eventsOfType(events, 'rocola_round_started')).toHaveLength(1);
+    });
+
+    it('si vuelve antes de que arranque, se lo cuenta de nuevo y bloquea otra vez', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+      const events = collect(laRocola);
+      laRocola.startMatch(setup.room.code);
+
+      rooms.markPlayerDisconnected(setup.teamB.socketId);
+      expect(eventsOfType(events, 'rocola_ready_state').at(-1)!.eligiblePlayerIds).toEqual([
+        setup.teamA.playerId,
+      ]);
+
+      rooms.rejoinRoom(setup.room.code, setup.teamB.playerToken, 'socket-b2');
+      expect(eventsOfType(events, 'rocola_ready_state').at(-1)!.eligiblePlayerIds).toEqual([
+        setup.teamA.playerId,
+        setup.teamB.playerId,
+      ]);
+
+      await laRocola.markReady(setup.room.code, setup.teamA.socketId);
+      expect(eventsOfType(events, 'rocola_round_started')).toHaveLength(0);
+    });
+
+    it('un Listo repetido mientras se cargan las canciones no arranca dos veces la partida', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+      const events = collect(laRocola);
+      laRocola.startMatch(setup.room.code);
+      await laRocola.markReady(setup.room.code, setup.teamA.socketId);
+
+      // La desconexión satisface el gate y empieza a cargar el catálogo (async);
+      // el "Listo" repetido llega antes de que termine y no debe relanzarlo.
+      rooms.markPlayerDisconnected(setup.teamB.socketId);
+      await laRocola.markReady(setup.room.code, setup.teamA.socketId);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(eventsOfType(events, 'rocola_round_started')).toHaveLength(1);
+    });
+
+    it('vencida la gracia en waiting_ready, el jugador sale del gate para siempre', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+      const events = collect(laRocola);
+      laRocola.startMatch(setup.room.code);
+
+      rooms.markPlayerDisconnected(setup.teamB.socketId, 0);
+      rooms.removeExpiredPlayers(FAR_FUTURE);
+
+      expect(eventsOfType(events, 'rocola_ready_state').at(-1)!.eligiblePlayerIds).toEqual([
+        setup.teamA.playerId,
+      ]);
+    });
+
+    it('desconectarse con la canción sonando no toca el estado de la ronda', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+      await reachSonando(laRocola, setup);
+
+      rooms.markPlayerDisconnected(setup.teamB.socketId);
+
+      expect(names(laRocola, setup)).toEqual(['rocola_round_started', 'rocola_buzzer_open']);
+    });
+
+    it('el timeout de respuesta resuelve la ronda aunque quien ganó el buzzer ya salió de la sala', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+      const events = collect(laRocola);
+      await reachSonando(laRocola, setup);
+      laRocola.handleBuzz(setup.room.code, setup.teamA.socketId);
+
+      rooms.markPlayerDisconnected(setup.teamA.socketId, 0);
+      rooms.removeExpiredPlayers(FAR_FUTURE);
+      expect(rooms.getRoom(setup.room.code)!.players.map((p) => p.id)).toEqual([
+        setup.teamB.playerId,
+      ]);
+
+      await vi.advanceTimersByTimeAsync(ANSWER_SECONDS * 1000);
+
+      // Sin respuesta cuenta como fallo: abre el robo para el otro equipo.
+      expect(eventsOfType(events, 'rocola_robo_started')).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(ROBO_SECONDS * 1000);
+      expect(eventsOfType(events, 'rocola_round_result').at(-1)!.resultado).toMatchObject({
+        puntos: 0,
+        teamId: null,
+      });
+    });
+
+    it('si el que perdió el robo salió de la sala, el resultado conserva su nombre', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+      const events = collect(laRocola);
+      await reachSonando(laRocola, setup);
+      laRocola.handleBuzz(setup.room.code, setup.teamA.socketId);
+      laRocola.handleSubmitAnswer(setup.room.code, setup.teamA.socketId, WRONG_ANSWER);
+      laRocola.handleBuzz(setup.room.code, setup.teamB.socketId);
+
+      rooms.markPlayerDisconnected(setup.teamB.socketId, 0);
+      rooms.removeExpiredPlayers(FAR_FUTURE);
+      await vi.advanceTimersByTimeAsync(ANSWER_SECONDS * 1000);
+
+      expect(eventsOfType(events, 'rocola_round_result').at(-1)!.resultado).toMatchObject({
+        playerId: setup.teamB.playerId,
+        playerName: 'Beto',
+        puntos: 0,
+      });
+    });
+
+    it('un socket ajeno sigue recibiendo NotYourAnswerError al responder', async () => {
+      const setup = createRoomWithTwoSoloTeams(rooms);
+      const laRocola = createLaRocola();
+      await reachSonando(laRocola, setup);
+      laRocola.handleBuzz(setup.room.code, setup.teamA.socketId);
+
+      expect(() =>
+        laRocola.handleSubmitAnswer(setup.room.code, setup.teamB.socketId, CORRECT_ANSWER),
+      ).toThrow(NotYourAnswerError);
+    });
+  });
 });

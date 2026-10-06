@@ -233,6 +233,38 @@ describe('RoomService', () => {
     });
   });
 
+  describe('aviso a los juegos de desconexión y reconexión', () => {
+    it('llama onPlayerDisconnected al desconectarse y onPlayerReconnected al reclamar el lugar', () => {
+      const svc = new RoomService();
+      const onPlayerDisconnected = vi.fn();
+      const onPlayerReconnected = vi.fn();
+      svc.registerRoomScoped({
+        disposeRoom: () => undefined,
+        onPlayerDisconnected,
+        onPlayerReconnected,
+      });
+      const room = svc.createRoom();
+      const { player, playerToken } = svc.joinRoom(room.code, 'Ana', 'socket-1');
+
+      svc.markPlayerDisconnected('socket-1');
+      expect(onPlayerDisconnected).toHaveBeenCalledWith(room.code, player.id);
+      expect(onPlayerReconnected).not.toHaveBeenCalled();
+
+      svc.rejoinRoom(room.code, playerToken, 'socket-2');
+      expect(onPlayerReconnected).toHaveBeenCalledWith(room.code, player.id);
+    });
+
+    it('no avisa si el socket no pertenece a ningún jugador', () => {
+      const svc = new RoomService();
+      const onPlayerDisconnected = vi.fn();
+      svc.registerRoomScoped({ disposeRoom: () => undefined, onPlayerDisconnected });
+
+      svc.markPlayerDisconnected('inexistente');
+
+      expect(onPlayerDisconnected).not.toHaveBeenCalled();
+    });
+  });
+
   describe('armado de equipos', () => {
     it('crea un equipo sin jugadores', () => {
       const room = service.createRoom();

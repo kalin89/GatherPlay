@@ -20,4 +20,9 @@ export interface RoomScopedState {
   // sala, para que un juego que estaba esperando a alguno de ellos (ej. el
   // actor que nunca presionó "Iniciar") no quede congelado.
   onPlayersRemoved?(code: string, playerIds: string[]): void;
+  // Opcionales: el jugador se desconectó (empieza su gracia) o reclamó su lugar
+  // con `rejoin_room`. Lo usa un juego que deja de esperar a los ausentes (ej.
+  // el `ReadyGate` de La Rocola).
+  onPlayerDisconnected?(code: string, playerId: string): void;
+  onPlayerReconnected?(code: string, playerId: string): void;
 }

@@ -335,4 +335,88 @@ describe('Reconexión de jugadores (e2e)', () => {
       otherEvents.some((e) => e.event === 'adivina_jugador_estado'),
     ).toBe(false);
   });
+
+  it('con La Rocola en curso (canción sonando), quien reconecta recupera la ronda sin previewUrl y puede hacer buzz con su socket nuevo', async () => {
+    const { screen, code, ana, beto } = await roomWithTwoTeamedPlayers('la-rocola');
+
+    const ready = waitFor(screen, 'rocola_ready_state');
+    screen.emit('start_la_rocola_game', { code });
+    await ready;
+    const open = waitFor(screen, 'rocola_buzzer_open');
+    ana.socket.emit('rocola_ready', { code });
+    beto.socket.emit('rocola_ready', { code });
+    await open; // cuenta regresiva real de 5 s
+
+    ana.socket.disconnect();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const returning = connect();
+    const received: { event: string; payload: any }[] = [];
+    for (const event of [
+      'rocola_round_started',
+      'rocola_buzzer_open',
+      'rocola_buzzer_locked',
+      'rocola_answer_tick',
+      'rocola_audio_control',
+    ]) {
+      returning.on(event, (payload) => received.push({ event, payload }));
+    }
+    const joined = waitFor<Joined>(returning, 'joined');
+    returning.on('connect', () =>
+      returning.emit('rejoin_room', { code, playerToken: ana.playerToken }),
+    );
+    expect((await joined).playerId).toBe(ana.playerId);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    expect(received.map((e) => e.event)).toEqual([
+      'rocola_round_started',
+      'rocola_buzzer_open',
+    ]);
+    expect(received[0]!.payload).toMatchObject({ roundNumber: 1 });
+    // El audio es solo de la pantalla: nada con `previewUrl` llega al celular.
+    expect(JSON.stringify(received)).not.toContain('previewUrl');
+
+    // El socket nuevo ya actúa como Ana: gana el buzzer y le corre su tiempo.
+    const locked = waitFor<{ playerId: string; playerName: string }>(
+      returning,
+      'rocola_buzzer_locked',
+    );
+    returning.emit('rocola_buzz', { code });
+    expect(await locked).toMatchObject({ playerId: ana.playerId, playerName: 'Ana' });
+    await waitFor(returning, 'rocola_answer_tick');
+  }, 20_000);
+
+  it('con Memoriza los objetos en fase de memorización, quien reconecta recupera los objetos y el tiempo, sin palabras ni pistas', async () => {
+    const { screen, code, ana, beto } = await roomWithTwoTeamedPlayers('memoriza-objetos');
+
+    const waiting = waitFor(screen, 'memoriza_waiting_ready');
+    screen.emit('start_memoriza_objetos_game', { code });
+    await waiting;
+    const memorizing = waitFor(screen, 'memoriza_memorizando');
+    ana.socket.emit('memoriza_ready', { code });
+    beto.socket.emit('memoriza_ready', { code });
+    await memorizing; // 5 s reales de "pon atención"
+
+    ana.socket.disconnect();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const returning = connect();
+    const received: { event: string; payload: any }[] = [];
+    for (const event of ['memoriza_waiting_ready', 'memoriza_pon_atencion', 'memoriza_memorizando']) {
+      returning.on(event, (payload) => received.push({ event, payload }));
+    }
+    const joined = waitFor<Joined>(returning, 'joined');
+    returning.on('connect', () =>
+      returning.emit('rejoin_room', { code, playerToken: ana.playerToken }),
+    );
+    expect((await joined).playerId).toBe(ana.playerId);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    expect(received[0]!.event).toBe('memoriza_memorizando');
+    const { items, remainingSeconds } = received[0]!.payload;
+    expect(items).toHaveLength(20);
+    expect(remainingSeconds).toBeLessThanOrEqual(30);
+    // Mientras se memoriza solo viaja la imagen: ni palabra ni pista.
+    expect(JSON.stringify(items)).not.toMatch(/palabra|pista/);
+  }, 20_000);
 });

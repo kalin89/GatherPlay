@@ -254,6 +254,9 @@ export class RoomService {
       if (player) {
         player.connected = false;
         this.roomMeta.get(code)?.disconnectedAt.set(player.id, now);
+        for (const service of this.roomScoped) {
+          service.onPlayerDisconnected?.(code, player.id);
+        }
         return room;
       }
     }
@@ -279,6 +282,9 @@ export class RoomService {
     player.socketId = socketId;
     player.connected = true;
     meta.disconnectedAt.delete(player.id);
+    for (const service of this.roomScoped) {
+      service.onPlayerReconnected?.(code, player.id);
+    }
     return { room, player, previousSocketId };
   }
 

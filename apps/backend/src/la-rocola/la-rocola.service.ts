@@ -1,7 +1,7 @@
 import { Injectable, OnModuleDestroy, Optional } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { RoomService } from '../room/room.service.js';
-import type { RoomScopedState } from '../room/room-scoped-state.js';
+import type { GameSnapshotEvent, RoomScopedState } from '../room/room-scoped-state.js';
 import { screenRoomName } from '../room/room.gateway.js';
 import { GameEngineService } from '../game-engine/game-engine.service.js';
 import { NotEnoughTeamsError } from '../game-engine/turn-distribution.js';
@@ -97,6 +97,21 @@ interface RocolaMatchState {
   eligibleTeamIds: string[] | null;
   matchScores: Map<string, number>;
   resultados: RocolaRoundResult[];
+  // El gate ya se satisfizo y se está cargando el catálogo: evita arrancar dos
+  // veces (un "Listo" repetido, o una desconexión que también lo satisface).
+  starting: boolean;
+  // Marcador al empezar la ronda en curso (el marcador solo cambia al
+  // resolverla): lo usa el snapshot para reconstruir `rocola_round_started`.
+  roundStartMarcador: TeamScore[];
+  // Nombre de quien ganó el buzzer: puede vencer su gracia y salir de
+  // `room.players` antes de que se juzgue su respuesta.
+  buzzedPlayerName: string | null;
+  lastResult: RocolaRoundResult | null;
+}
+
+interface FinishedMatchResult {
+  scores: TeamScore[];
+  canciones: { titulo: string; artista: string; teamId: string | null }[];
 }
 
 export const TOTAL_ROUNDS = 10;
@@ -119,6 +134,9 @@ export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
   // Canciones ya sonadas por sala — sobrevive entre partidas, mismo límite
   // ya documentado de "no hay limpieza de salas todavía".
   private readonly roomUsedSongs = new Map<string, Set<string>>();
+  // Resultado final de la partida que acaba de terminar, mientras dura la
+  // pantalla de resultados (para quien reconecta en ese lapso).
+  private readonly finishedResults = new Map<string, FinishedMatchResult>();
   private readonly eventsSubject = new Subject<LaRocolaEvent>();
   readonly events$: Observable<LaRocolaEvent> = this.eventsSubject.asObservable();
 
@@ -141,6 +159,104 @@ export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
     this.matches.get(code)?.timer?.stop();
     this.matches.delete(code);
     this.roomUsedSongs.delete(code);
+    this.finishedResults.delete(code);
+  }
+
+  // Lo que necesita ver un jugador que reconecta. El snapshot es igual para
+  // todos (quien ganó el buzzer ve su input porque el reducer compara
+  // `buzzedPlayerId` con su id) y nunca incluye `previewUrl` ni el título antes
+  // de la revelación: el audio es solo de la pantalla.
+  snapshotFor(code: string, _playerId: string): GameSnapshotEvent[] {
+    const match = this.matches.get(code);
+    if (!match) {
+      const result = this.finishedResults.get(code);
+      return result ? [{ event: 'rocola_match_result', payload: { code, ...result } }] : [];
+    }
+
+    if (match.phase === 'waiting_ready') {
+      return [{ event: 'rocola_ready_state', payload: this.readyStatePayload(code, match) }];
+    }
+
+    const roundStarted: GameSnapshotEvent = {
+      event: 'rocola_round_started',
+      payload: {
+        code,
+        roundNumber: match.currentIndex + 1,
+        totalRounds: TOTAL_ROUNDS,
+        marcador: match.roundStartMarcador,
+      },
+    };
+    const remaining = match.timer?.remainingSeconds ?? 0;
+    const robo = (remainingSeconds: number): GameSnapshotEvent => ({
+      event: 'rocola_robo_started',
+      payload: {
+        code,
+        eligibleTeamIds: match.eligibleTeamIds ?? [],
+        eligibleTeamNames: this.teamNames(code, match.eligibleTeamIds ?? []),
+        remainingSeconds,
+      },
+    });
+    const answering = (): GameSnapshotEvent[] => [
+      {
+        event: 'rocola_buzzer_locked',
+        payload: {
+          code,
+          playerId: match.buzzedPlayerId,
+          playerName: match.buzzedPlayerName,
+          teamId: match.buzzedTeamId,
+        },
+      },
+      { event: 'rocola_answer_tick', payload: { code, remainingSeconds: remaining } },
+    ];
+
+    switch (match.phase) {
+      case 'countdown':
+        return [
+          roundStarted,
+          { event: 'rocola_countdown_tick', payload: { code, remainingSeconds: remaining } },
+        ];
+      case 'sonando':
+        return [
+          roundStarted,
+          { event: 'rocola_buzzer_open', payload: { code, eligibleTeamIds: null } },
+        ];
+      case 'respondiendo':
+        return [roundStarted, ...answering()];
+      case 'robo':
+        return [roundStarted, robo(remaining)];
+      case 'robo_respondiendo':
+        return [roundStarted, robo(ROBO_SECONDS), ...answering()];
+      case 'revelacion':
+        return match.lastResult
+          ? [roundStarted, { event: 'rocola_round_result', payload: { code, resultado: match.lastResult } }]
+          : [roundStarted];
+    }
+  }
+
+  // Un desconectado deja de bloquear el "Listo" (y de contar en el X/Y); si
+  // vuelve antes de que arranque, se lo cuenta de nuevo con su "Listo" intacto.
+  onPlayerDisconnected(code: string, playerId: string): void {
+    const match = this.matches.get(code);
+    if (!match || match.phase !== 'waiting_ready') return;
+    match.readyGate.markAbsent(playerId);
+    this.emitReadyState(code);
+    this.beginIfSatisfied(code, match);
+  }
+
+  onPlayerReconnected(code: string, playerId: string): void {
+    const match = this.matches.get(code);
+    if (!match || match.phase !== 'waiting_ready') return;
+    match.readyGate.markPresent(playerId);
+    this.emitReadyState(code);
+  }
+
+  // Vencida la gracia, el jugador sale del gate para siempre.
+  onPlayersRemoved(code: string, playerIds: string[]): void {
+    const match = this.matches.get(code);
+    if (!match || match.phase !== 'waiting_ready') return;
+    for (const id of playerIds) match.readyGate.removePlayer(id);
+    this.emitReadyState(code);
+    this.beginIfSatisfied(code, match);
   }
 
   onModuleDestroy(): void {
@@ -183,7 +299,12 @@ export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
       eligibleTeamIds: null,
       matchScores: new Map(participating.map((t) => [t.id, 0])),
       resultados: [],
+      starting: false,
+      roundStartMarcador: [],
+      buzzedPlayerName: null,
+      lastResult: null,
     });
+    this.finishedResults.delete(code);
 
     this.emit({ type: 'room_state', code, room });
     this.emitReadyState(code);
@@ -207,9 +328,18 @@ export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
     match.readyGate.markReady(player.id);
     this.emitReadyState(code);
 
-    if (match.readyGate.isSatisfied) {
+    if (match.readyGate.isSatisfied && !match.starting) {
+      match.starting = true;
       await this.beginContent(code);
     }
+  }
+
+  // Disparo sin esperar la carga del catálogo (desde un hook de desconexión no
+  // hay a quién devolverle un error).
+  private beginIfSatisfied(code: string, match: RocolaMatchState): void {
+    if (!match.readyGate.isSatisfied || match.starting) return;
+    match.starting = true;
+    this.beginContent(code).catch(() => {});
   }
 
   handleBuzz(code: string, socketId: string): void {
@@ -237,6 +367,7 @@ export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
 
     match.timer?.stop();
     match.buzzedPlayerId = player.id;
+    match.buzzedPlayerName = player.name;
     match.buzzedTeamId = team.id;
     match.phase = match.phase === 'robo' ? 'robo_respondiendo' : 'respondiendo';
 
@@ -261,43 +392,43 @@ export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
       (remainingSeconds) => {
         this.emit({ type: 'rocola_answer_tick', code, remainingSeconds });
       },
-      () => this.judgeAnswer(code, player.id, ''),
+      () => this.resolveAnswer(code, ''),
     );
     match.timer = timer;
     timer.start(ANSWER_SECONDS);
   }
 
   handleSubmitAnswer(code: string, socketId: string, texto: string): void {
-    const room = this.rooms.getRoomOrThrow(code);
-    const player = room.players.find((p) => p.socketId === socketId);
-    this.judgeAnswer(code, player?.id ?? null, texto, socketId);
-  }
-
-  // Recibe el `playerId`, no el socket: el timeout de respuesta lo captura al
-  // hacer buzz, y si el jugador reconecta mientras escribe su `socketId`
-  // cambia (ver `player-reconnection`).
-  private judgeAnswer(
-    code: string,
-    playerId: string | null,
-    texto: string,
-    socketIdForError: string = playerId ?? '',
-  ): void {
     const match = this.matches.get(code);
     if (!match) {
       throw new NoRocolaMatchError(code);
     }
+    const room = this.rooms.getRoomOrThrow(code);
+    const player = room.players.find((p) => p.socketId === socketId);
     if (match.phase !== 'respondiendo' && match.phase !== 'robo_respondiendo') {
-      // El propio timeout interno reintenta llamar a este método — si ya se
-      // resolvió (por un submit real llegado un instante antes), no hace
-      // nada, en vez de fallar.
+      // Ya se resolvió (por el timeout, o por un submit llegado un instante
+      // antes): no hace nada, en vez de fallar.
+      return;
+    }
+    if (!player || player.id !== match.buzzedPlayerId) {
+      throw new NotYourAnswerError(player?.id ?? socketId);
+    }
+    this.resolveAnswer(code, texto);
+  }
+
+  // Juzga la respuesta de quien ganó el buzzer. No busca al jugador en
+  // `room.players`: el timeout de respuesta también pasa por acá, y quien
+  // escribía pudo vencer su gracia y salir de la sala (ver `player-reconnection`).
+  private resolveAnswer(code: string, texto: string): void {
+    const match = this.matches.get(code);
+    if (!match) return;
+    if (match.phase !== 'respondiendo' && match.phase !== 'robo_respondiendo') {
       return;
     }
 
     const room = this.rooms.getRoomOrThrow(code);
-    const player = room.players.find((p) => p.id === playerId);
-    if (!player || player.id !== match.buzzedPlayerId) {
-      throw new NotYourAnswerError(player?.id ?? socketIdForError);
-    }
+    const playerId = match.buzzedPlayerId!;
+    const playerName = match.buzzedPlayerName!;
 
     match.timer?.stop();
     match.timer = null;
@@ -313,8 +444,8 @@ export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
       );
       this.resolveRound(code, {
         teamId: match.buzzedTeamId,
-        playerId: player.id,
-        playerName: player.name,
+        playerId,
+        playerName,
         puntos: 1,
         respuesta: texto,
       });
@@ -328,6 +459,7 @@ export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
         .filter((t) => t.id !== match.failedTeamId)
         .map((t) => t.id);
       match.buzzedPlayerId = null;
+      match.buzzedPlayerName = null;
       match.buzzedTeamId = null;
       match.phase = 'robo';
 
@@ -337,9 +469,7 @@ export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
         targetSocketIds: [screenRoomName(code)],
         action: 'resume',
       });
-      const eligibleTeamNames = match.eligibleTeamIds.map(
-        (id) => room.teams.find((t) => t.id === id)?.name ?? id,
-      );
+      const eligibleTeamNames = this.teamNames(code, match.eligibleTeamIds);
       this.emit({
         type: 'rocola_robo_started',
         code,
@@ -360,8 +490,8 @@ export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
     // phase === 'robo_respondiendo': también falló el robo, se acabó el turno.
     this.resolveRound(code, {
       teamId: null,
-      playerId: player.id,
-      playerName: player.name,
+      playerId,
+      playerName,
       puntos: 0,
       respuesta: texto,
     });
@@ -376,11 +506,18 @@ export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
     if (!match) return;
 
     const used = this.roomUsedSongs.get(code) ?? new Set<string>();
-    const songs = await this.content.selectSongs(
-      TOTAL_ROUNDS,
-      [...used],
-      match.filtro ?? undefined,
-    );
+    let songs: RocolaSong[];
+    try {
+      songs = await this.content.selectSongs(
+        TOTAL_ROUNDS,
+        [...used],
+        match.filtro ?? undefined,
+      );
+    } catch (error) {
+      // Permite reintentar con otro "Listo" / desconexión.
+      match.starting = false;
+      throw error;
+    }
     // La sala pudo cerrarse mientras se resolvía el catálogo: no resucitar estado.
     if (this.matches.get(code) !== match) return;
     songs.forEach((s) => used.add(s.id));
@@ -396,11 +533,14 @@ export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
 
     match.phase = 'countdown';
     match.buzzedPlayerId = null;
+    match.buzzedPlayerName = null;
     match.buzzedTeamId = null;
     match.failedTeamId = null;
     match.eligibleTeamIds = null;
+    match.lastResult = null;
 
     const marcador = this.currentMarcador(code);
+    match.roundStartMarcador = marcador;
     this.emit({
       type: 'rocola_round_started',
       code,
@@ -482,6 +622,7 @@ export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
       ...parcial,
     };
     match.resultados.push(resultado);
+    match.lastResult = resultado;
     match.phase = 'revelacion';
 
     this.emit({ type: 'rocola_round_result', code, resultado });
@@ -516,6 +657,7 @@ export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
     }));
 
     this.matches.delete(code);
+    this.finishedResults.set(code, { scores, canciones });
     this.emit({ type: 'room_state', code, room });
     this.emit({ type: 'rocola_match_result', code, scores, canciones });
     this.scheduleReturnToSelection(code);
@@ -523,6 +665,7 @@ export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
 
   private scheduleReturnToSelection(code: string): void {
     this.scheduler(() => {
+      this.finishedResults.delete(code);
       const room = this.rooms.getRoom(code);
       if (!room) return;
       room.currentGame = null;
@@ -539,15 +682,23 @@ export class LaRocolaService implements OnModuleDestroy, RoomScopedState {
       .map((t) => ({ teamId: t.id, score: match.matchScores.get(t.id)! }));
   }
 
-  private emitReadyState(code: string): void {
-    const match = this.matches.get(code);
-    if (!match) return;
-    this.emit({
-      type: 'rocola_ready_state',
+  private readyStatePayload(code: string, match: RocolaMatchState) {
+    return {
       code,
       readyPlayerIds: match.readyGate.readyPlayerIds,
       eligiblePlayerIds: match.readyGate.eligiblePlayerIds,
-    });
+    };
+  }
+
+  private teamNames(code: string, teamIds: string[]): string[] {
+    const room = this.rooms.getRoomOrThrow(code);
+    return teamIds.map((id) => room.teams.find((t) => t.id === id)?.name ?? id);
+  }
+
+  private emitReadyState(code: string): void {
+    const match = this.matches.get(code);
+    if (!match) return;
+    this.emit({ type: 'rocola_ready_state', ...this.readyStatePayload(code, match) });
   }
 
   private emit(event: LaRocolaEvent): void {

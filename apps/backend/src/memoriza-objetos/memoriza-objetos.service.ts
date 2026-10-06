@@ -1,7 +1,7 @@
 import { Injectable, OnModuleDestroy, Optional } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { RoomService } from '../room/room.service.js';
-import type { RoomScopedState } from '../room/room-scoped-state.js';
+import type { GameSnapshotEvent, RoomScopedState } from '../room/room-scoped-state.js';
 import { GameEngineService } from '../game-engine/game-engine.service.js';
 import { NotEnoughTeamsError } from '../game-engine/turn-distribution.js';
 import { ReadyGate } from '../game-engine/ready-gate.js';
@@ -111,6 +111,12 @@ function buildPista(palabra: string, letraIndex: number): string {
     .join(' ');
 }
 
+interface FinishedMatchResult {
+  scores: TeamScore[];
+  palabrasPorEquipo: { teamId: string; palabras: string[] }[];
+  items: MemorizaBoardItemPublic[];
+}
+
 // Mismo patrón general que AdivinaPalabraService/LaRocolaService (RoundTimer
 // directo, mutación directa de room.status/room.currentGame), con una
 // diferencia estructural propia de este juego: el reloj de cada equipo no se
@@ -125,6 +131,9 @@ export class MemorizaObjetosService implements OnModuleDestroy, RoomScopedState 
   // Objetos ya mostrados por sala — sobrevive entre partidas, mismo límite ya
   // documentado de "no hay limpieza de salas todavía".
   private readonly roomUsedObjects = new Map<string, Set<string>>();
+  // Resultado final de la partida que acaba de terminar, mientras dura la
+  // pantalla de resultados (para quien reconecta en ese lapso).
+  private readonly finishedResults = new Map<string, FinishedMatchResult>();
   private readonly eventsSubject = new Subject<MemorizaObjetosEvent>();
   readonly events$: Observable<MemorizaObjetosEvent> = this.eventsSubject.asObservable();
 
@@ -148,6 +157,97 @@ export class MemorizaObjetosService implements OnModuleDestroy, RoomScopedState 
     this.matches.get(code)?.timer?.stop();
     this.matches.delete(code);
     this.roomUsedObjects.delete(code);
+    this.finishedResults.delete(code);
+  }
+
+  // Lo que necesita ver un jugador que reconecta. Reusa `toPublicItems`, así que
+  // nunca incluye la palabra de un objeto que sigue oculto.
+  snapshotFor(code: string, playerId: string): GameSnapshotEvent[] {
+    const match = this.matches.get(code);
+    if (!match) {
+      const result = this.finishedResults.get(code);
+      return result ? [{ event: 'memoriza_match_result', payload: { code, ...result } }] : [];
+    }
+
+    switch (match.phase) {
+      case 'waiting_ready':
+        return [{ event: 'memoriza_waiting_ready', payload: this.waitingReadyPayload(code, match) }];
+      case 'pon_atencion':
+        return [
+          {
+            event: 'memoriza_pon_atencion',
+            payload: { code, remainingSeconds: match.timer?.remainingSeconds ?? 0 },
+          },
+        ];
+      case 'memorizando':
+        return [
+          {
+            event: 'memoriza_memorizando',
+            payload: {
+              code,
+              items: this.publicMemorizeItems(match),
+              remainingSeconds: match.timer?.remainingSeconds ?? 0,
+            },
+          },
+        ];
+      case 'adivinando': {
+        const snapshot: GameSnapshotEvent[] = [
+          { event: 'memoriza_tablero', payload: this.tableroPayload(code, match) },
+        ];
+        if (match.activePlayerId === playerId) {
+          snapshot.push({
+            event: 'memoriza_turno_jugador',
+            payload: { code, ...this.turnoState(match) },
+          });
+        }
+        return snapshot;
+      }
+    }
+  }
+
+  // Un desconectado deja de bloquear el "Listo"; si era quien tenía el turno,
+  // el turno termina en ese momento (sin contar como intento fallido) para que
+  // el reloj de su equipo no se consuma mientras no está.
+  onPlayerDisconnected(code: string, playerId: string): void {
+    const match = this.matches.get(code);
+    if (!match) return;
+    if (match.phase === 'waiting_ready') {
+      match.readyGate.markAbsent(playerId);
+      this.emitWaitingReady(code);
+      if (match.readyGate.isSatisfied) this.beginAttentionPhase(code);
+      return;
+    }
+    if (match.phase === 'adivinando' && match.activePlayerId === playerId) {
+      this.resolveTurnEnd(code);
+    }
+  }
+
+  onPlayerReconnected(code: string, playerId: string): void {
+    const match = this.matches.get(code);
+    if (!match) return;
+    if (match.phase === 'waiting_ready') {
+      match.readyGate.markPresent(playerId);
+      this.emitWaitingReady(code);
+      return;
+    }
+    // La partida estaba en pausa (nadie conectado podía jugar): se reanuda.
+    if (match.phase === 'adivinando' && match.activePlayerId === null) {
+      const teamId = this.firstPlayableTeam(code, match);
+      if (teamId) {
+        match.activeTeamId = teamId;
+        this.startTurn(code);
+      }
+    }
+  }
+
+  // Vencida la gracia, el jugador sale del gate para siempre. En `adivinando`
+  // ya se lo trató como desconectado: no hace falta nada.
+  onPlayersRemoved(code: string, playerIds: string[]): void {
+    const match = this.matches.get(code);
+    if (!match || match.phase !== 'waiting_ready') return;
+    for (const id of playerIds) match.readyGate.removePlayer(id);
+    this.emitWaitingReady(code);
+    if (match.readyGate.isSatisfied) this.beginAttentionPhase(code);
   }
 
   onModuleDestroy(): void {
@@ -184,6 +284,7 @@ export class MemorizaObjetosService implements OnModuleDestroy, RoomScopedState 
 
     const eligiblePlayerIds = participating.flatMap((t) => t.playerIds);
     room.status = 'jugando';
+    this.finishedResults.delete(code);
     this.matches.set(code, {
       items,
       teamMembers: new Map(participating.map((t) => [t.id, [...t.playerIds]])),
@@ -332,7 +433,7 @@ export class MemorizaObjetosService implements OnModuleDestroy, RoomScopedState 
     if (!match) return;
 
     match.phase = 'memorizando';
-    const publicItems = match.items.map((i) => ({ id: i.id, imagenUrl: i.imagenUrl }));
+    const publicItems = this.publicMemorizeItems(match);
 
     const timer = new RoundTimer(
       (remainingSeconds) => {
@@ -356,8 +457,43 @@ export class MemorizaObjetosService implements OnModuleDestroy, RoomScopedState 
 
     match.phase = 'adivinando';
     const teamIds = [...match.teamMembers.keys()];
-    match.activeTeamId = teamIds[Math.floor(this.random() * teamIds.length)]!;
+    const drawn = teamIds[Math.floor(this.random() * teamIds.length)]!;
+    const playable = this.teamCanPlay(code, match, drawn)
+      ? drawn
+      : this.firstPlayableTeam(code, match);
+    match.activeTeamId = playable ?? drawn;
+    if (!playable) {
+      this.pauseGuessing(code);
+      return;
+    }
     this.startTurn(code);
+  }
+
+  private isConnected(code: string, playerId: string): boolean {
+    const room = this.rooms.getRoomOrThrow(code);
+    return room.players.find((p) => p.id === playerId)?.connected === true;
+  }
+
+  // Un equipo juega si todavía tiene tiempo y al menos un miembro conectado
+  // (un jugador cuya gracia venció ya no está en `room.players`).
+  private teamCanPlay(code: string, match: MemorizaMatchState, teamId: string): boolean {
+    if (match.eliminated.has(teamId)) return false;
+    return (match.teamMembers.get(teamId) ?? []).some((id) => this.isConnected(code, id));
+  }
+
+  private firstPlayableTeam(code: string, match: MemorizaMatchState): string | undefined {
+    return [...match.teamMembers.keys()].find((id) => this.teamCanPlay(code, match, id));
+  }
+
+  // Quedan equipos con tiempo pero ninguno tiene a nadie conectado: el reloj
+  // se detiene y se espera a que alguien vuelva (`onPlayerReconnected`).
+  private pauseGuessing(code: string): void {
+    const match = this.matches.get(code);
+    if (!match) return;
+    match.timer?.stop();
+    match.timer = null;
+    match.activePlayerId = null;
+    this.emitTablero(code);
   }
 
   private startTurn(code: string): void {
@@ -367,8 +503,18 @@ export class MemorizaObjetosService implements OnModuleDestroy, RoomScopedState 
     const activeTeamId = match.activeTeamId!;
     const members = match.teamMembers.get(activeTeamId)!;
     const cursor = match.turnCursor.get(activeTeamId)!;
-    match.activePlayerId = members[cursor]!;
-    match.turnCursor.set(activeTeamId, (cursor + 1) % members.length);
+    // La rotación salta a los desconectados.
+    let offset = 0;
+    while (offset < members.length && !this.isConnected(code, members[(cursor + offset) % members.length]!)) {
+      offset++;
+    }
+    if (offset === members.length) {
+      this.pauseGuessing(code);
+      return;
+    }
+    const chosen = (cursor + offset) % members.length;
+    match.activePlayerId = members[chosen]!;
+    match.turnCursor.set(activeTeamId, (chosen + 1) % members.length);
     match.turnStartRemaining = match.clocks.get(activeTeamId)!;
     match.turnNumber += 1;
 
@@ -404,19 +550,23 @@ export class MemorizaObjetosService implements OnModuleDestroy, RoomScopedState 
 
     const previousTeamId = match.activeTeamId!;
     const otherTeamIds = [...match.teamMembers.keys()].filter((id) => id !== previousTeamId);
-    const nextOther = otherTeamIds.find((id) => !match.eliminated.has(id));
+    const nextOther = otherTeamIds.find((id) => this.teamCanPlay(code, match, id));
 
     if (nextOther) {
       match.activeTeamId = nextOther;
-    } else if (match.eliminated.has(previousTeamId)) {
-      // El equipo que acaba de jugar también está eliminado y no queda
-      // ningún otro con tiempo — ambos relojes llegaron a cero.
+    } else if (this.teamCanPlay(code, match, previousTeamId)) {
+      // Si no hay otro equipo que pueda jugar pero `previousTeamId` sí,
+      // `activeTeamId` no cambia: sigue jugando solo, sin alternar (caso
+      // límite documentado en spec.md).
+    } else if ([...match.teamMembers.keys()].every((id) => match.eliminated.has(id))) {
+      // Todos los relojes llegaron a cero.
       this.finishMatch(code);
       return;
+    } else {
+      // Con tiempo pero sin nadie conectado que pueda jugar.
+      this.pauseGuessing(code);
+      return;
     }
-    // Si no hay otro equipo con tiempo pero `previousTeamId` sigue con
-    // tiempo, `activeTeamId` no cambia: sigue jugando solo, sin alternar
-    // (caso límite documentado en spec.md).
 
     this.startTurn(code);
   }
@@ -450,6 +600,7 @@ export class MemorizaObjetosService implements OnModuleDestroy, RoomScopedState 
     const items = this.toPublicItems(match.items);
 
     this.matches.delete(code);
+    this.finishedResults.set(code, { scores, palabrasPorEquipo, items });
     this.emit({ type: 'room_state', code, room });
     this.emit({ type: 'memoriza_match_result', code, scores, palabrasPorEquipo, items });
     this.scheduleReturnToSelection(code);
@@ -457,6 +608,7 @@ export class MemorizaObjetosService implements OnModuleDestroy, RoomScopedState 
 
   private scheduleReturnToSelection(code: string): void {
     this.scheduler(() => {
+      this.finishedResults.delete(code);
       const room = this.rooms.getRoom(code);
       if (!room) return;
       room.currentGame = null;
@@ -464,16 +616,23 @@ export class MemorizaObjetosService implements OnModuleDestroy, RoomScopedState 
     }, RESULTS_DISPLAY_MS);
   }
 
-  private emitWaitingReady(code: string): void {
-    const match = this.matches.get(code);
-    if (!match) return;
-    this.emit({
-      type: 'memoriza_waiting_ready',
+  private publicMemorizeItems(match: MemorizaMatchState): { id: string; imagenUrl: string }[] {
+    return match.items.map((i) => ({ id: i.id, imagenUrl: i.imagenUrl }));
+  }
+
+  private waitingReadyPayload(code: string, match: MemorizaMatchState) {
+    return {
       code,
       readyPlayerIds: match.readyGate.readyPlayerIds,
       eligiblePlayerIds: match.readyGate.eligiblePlayerIds,
-      items: match.items.map((i) => ({ id: i.id, imagenUrl: i.imagenUrl })),
-    });
+      items: this.publicMemorizeItems(match),
+    };
+  }
+
+  private emitWaitingReady(code: string): void {
+    const match = this.matches.get(code);
+    if (!match) return;
+    this.emit({ type: 'memoriza_waiting_ready', ...this.waitingReadyPayload(code, match) });
   }
 
   private toPublicItems(items: MemorizaBoardItem[]): MemorizaBoardItemPublic[] {
@@ -487,12 +646,8 @@ export class MemorizaObjetosService implements OnModuleDestroy, RoomScopedState 
     }));
   }
 
-  private emitTablero(code: string): void {
-    const match = this.matches.get(code);
-    if (!match) return;
+  private tableroPayload(code: string, match: MemorizaMatchState) {
     const room = this.rooms.getRoomOrThrow(code);
-
-    const items = this.toPublicItems(match.items);
     const clocks: MemorizaTeamClock[] = [...match.clocks.entries()].map(
       ([teamId, remainingSeconds]) => ({ teamId, remainingSeconds }),
     );
@@ -504,16 +659,26 @@ export class MemorizaObjetosService implements OnModuleDestroy, RoomScopedState 
             playerName: room.players.find((p) => p.id === match.activePlayerId)?.name ?? '',
           }
         : null;
-
-    this.emit({
-      type: 'memoriza_tablero',
+    return {
       code,
-      items,
+      items: this.toPublicItems(match.items),
       clocks,
       equipoActivoId: match.activeTeamId,
       jugadorActivo,
       turnNumber: match.turnNumber,
-    });
+    };
+  }
+
+  private emitTablero(code: string): void {
+    const match = this.matches.get(code);
+    if (!match) return;
+    this.emit({ type: 'memoriza_tablero', ...this.tableroPayload(code, match) });
+  }
+
+  private turnoState(match: MemorizaMatchState) {
+    const remainingSeconds = match.clocks.get(match.activeTeamId!)!;
+    const puedePasar = match.turnStartRemaining - remainingSeconds >= PASS_UNLOCK_SECONDS;
+    return { remainingSeconds, puedePasar };
   }
 
   private emitTurnoJugador(code: string): void {
@@ -523,15 +688,11 @@ export class MemorizaObjetosService implements OnModuleDestroy, RoomScopedState 
     const player = room.players.find((p) => p.id === match.activePlayerId);
     if (!player) return;
 
-    const remainingSeconds = match.clocks.get(match.activeTeamId)!;
-    const puedePasar = match.turnStartRemaining - remainingSeconds >= PASS_UNLOCK_SECONDS;
-
     this.emit({
       type: 'memoriza_turno_jugador',
       code,
       targetSocketIds: [player.socketId],
-      remainingSeconds,
-      puedePasar,
+      ...this.turnoState(match),
     });
   }
 

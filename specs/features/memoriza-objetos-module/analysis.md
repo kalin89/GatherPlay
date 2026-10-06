@@ -390,6 +390,14 @@ Se agrega a `AppModule`.
   `memoriza_intento_resultado` con `acierto: true` → el turno pasa al otro jugador →
   se repite hasta que se acaban los relojes o las 20 palabras → `memoriza_match_result`.
 
+## Desconexión de jugadores
+
+Con la reconexión de jugadores (`specs/features/player-reconnection/analysis.md`) el
+reloj de equipo no corre mientras el jugador en turno está desconectado: su turno
+termina en el momento de la caída (sin contar como intento), la rotación salta a los
+desconectados, y si ningún equipo con tiempo tiene a alguien conectado la partida se
+pausa hasta que alguien vuelva. Un desconectado tampoco bloquea el "Listo" inicial.
+
 ## Checklist manual
 
 No aplica — tarea de puro backend sin ninguna UI conectada todavía (excepción

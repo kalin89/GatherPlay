@@ -525,4 +525,301 @@ describe('MemorizaObjetosService', () => {
       }).not.toThrow();
     });
   });
+
+  describe('reconexión: snapshotFor, ReadyGate y turnos con jugadores desconectados', () => {
+    const FAR_FUTURE = Date.now() + 10 * 60_000;
+
+    interface Seat {
+      id: string;
+      socketId: string;
+      token: string;
+    }
+
+    // Rojos con Ana (y Cami si `withCami`), Azules con Beto.
+    function createRoom(withCami = false) {
+      const room = rooms.createRoom();
+      const join = (name: string, socketId: string): Seat => {
+        const joined = rooms.joinRoom(room.code, name, socketId);
+        return { id: joined.player.id, socketId, token: joined.playerToken };
+      };
+      const ana = join('Ana', 'socket-a');
+      const beto = join('Beto', 'socket-b');
+      const cami = withCami ? join('Cami', 'socket-c') : null;
+      const rojos = rooms.createTeam(room.code, 'Rojos', '#FF0000').teams[0]!.id;
+      const azules = rooms.createTeam(room.code, 'Azules', '#0000FF').teams[1]!.id;
+      rooms.assignPlayerToTeam(room.code, ana.id, rojos);
+      rooms.assignPlayerToTeam(room.code, beto.id, azules);
+      if (cami) rooms.assignPlayerToTeam(room.code, cami.id, rojos);
+      return { code: room.code, ana, beto, cami, rojos, azules };
+    }
+
+    function collect(memoriza: MemorizaObjetosService): MemorizaObjetosEvent[] {
+      const events: MemorizaObjetosEvent[] = [];
+      memoriza.events$.subscribe((e) => events.push(e));
+      return events;
+    }
+
+    async function toGuessing(memoriza: MemorizaObjetosService, r: ReturnType<typeof createRoom>) {
+      memoriza.startMatch(r.code);
+      memoriza.markReady(r.code, r.ana.socketId);
+      memoriza.markReady(r.code, r.beto.socketId);
+      if (r.cami) memoriza.markReady(r.code, r.cami.socketId);
+      await vi.advanceTimersByTimeAsync(ATTENTION_SECONDS * 1000 + MEMORIZE_SECONDS * 1000);
+    }
+
+    const lastBoard = (events: MemorizaObjetosEvent[]) =>
+      eventsOfType(events, 'memoriza_tablero').at(-1)!;
+    const clockOf = (events: MemorizaObjetosEvent[], teamId: string) =>
+      lastBoard(events).clocks.find((c) => c.teamId === teamId)!.remainingSeconds;
+
+    it('devuelve vacío sin partida ni resultados', () => {
+      const r = createRoom();
+      const memoriza = createMemorizaObjetos();
+
+      expect(memoriza.snapshotFor(r.code, r.ana.id)).toEqual([]);
+    });
+
+    it('en waiting_ready manda memoriza_waiting_ready con quién ya está listo', () => {
+      const r = createRoom();
+      const memoriza = createMemorizaObjetos();
+      memoriza.startMatch(r.code);
+      memoriza.markReady(r.code, r.ana.socketId);
+
+      const snapshot = memoriza.snapshotFor(r.code, r.beto.id);
+
+      expect(snapshot.map((e) => e.event)).toEqual(['memoriza_waiting_ready']);
+      expect(snapshot[0]!.payload).toMatchObject({
+        readyPlayerIds: [r.ana.id],
+        eligiblePlayerIds: [r.ana.id, r.beto.id],
+      });
+    });
+
+    it('en pon_atencion manda el tiempo restante real', async () => {
+      const r = createRoom();
+      const memoriza = createMemorizaObjetos();
+      memoriza.startMatch(r.code);
+      memoriza.markReady(r.code, r.ana.socketId);
+      memoriza.markReady(r.code, r.beto.socketId);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(memoriza.snapshotFor(r.code, r.ana.id)).toEqual([
+        {
+          event: 'memoriza_pon_atencion',
+          payload: { code: r.code, remainingSeconds: ATTENTION_SECONDS - 2 },
+        },
+      ]);
+    });
+
+    it('memorizando manda los 20 objetos (solo id e imagen) y el tiempo restante', async () => {
+      const r = createRoom();
+      const memoriza = createMemorizaObjetos();
+      memoriza.startMatch(r.code);
+      memoriza.markReady(r.code, r.ana.socketId);
+      memoriza.markReady(r.code, r.beto.socketId);
+      await vi.advanceTimersByTimeAsync(ATTENTION_SECONDS * 1000 + 3000);
+
+      const snapshot = memoriza.snapshotFor(r.code, r.ana.id);
+
+      expect(snapshot.map((e) => e.event)).toEqual(['memoriza_memorizando']);
+      const payload = snapshot[0]!.payload as {
+        items: Record<string, unknown>[];
+        remainingSeconds: number;
+      };
+      expect(payload.remainingSeconds).toBe(MEMORIZE_SECONDS - 3);
+      expect(payload.items).toHaveLength(20);
+      expect(Object.keys(payload.items[0]!).sort()).toEqual(['id', 'imagenUrl']);
+    });
+
+    it('adivinando: todos reciben el tablero, solo el jugador en turno recibe turno_jugador y ninguna palabra oculta viaja', async () => {
+      const r = createRoom();
+      const memoriza = createMemorizaObjetos();
+      await toGuessing(memoriza, r);
+      await vi.advanceTimersByTimeAsync(4000);
+
+      const active = memoriza.snapshotFor(r.code, r.ana.id);
+      const other = memoriza.snapshotFor(r.code, r.beto.id);
+
+      expect(active.map((e) => e.event)).toEqual(['memoriza_tablero', 'memoriza_turno_jugador']);
+      expect(other.map((e) => e.event)).toEqual(['memoriza_tablero']);
+      expect(active[1]!.payload).toEqual({
+        code: r.code,
+        remainingSeconds: TEAM_CLOCK_SECONDS - 4,
+        puedePasar: false,
+      });
+      expect(active[0]!.payload).toMatchObject({
+        equipoActivoId: r.rojos,
+        jugadorActivo: { playerId: r.ana.id },
+      });
+      const items = (active[0]!.payload as { items: { palabra: string | null }[] }).items;
+      expect(items.every((i) => i.palabra === null)).toBe(true);
+    });
+
+    it('terminada la partida manda memoriza_match_result hasta volver a selección', async () => {
+      const r = createRoom();
+      const memoriza = createMemorizaObjetos();
+      await toGuessing(memoriza, r);
+      await vi.advanceTimersByTimeAsync(TEAM_CLOCK_SECONDS * 2 * 1000 + 1000);
+
+      expect(memoriza.snapshotFor(r.code, r.beto.id).map((e) => e.event)).toEqual([
+        'memoriza_match_result',
+      ]);
+
+      await vi.advanceTimersByTimeAsync(RESULTS_DISPLAY_MS);
+      expect(memoriza.snapshotFor(r.code, r.beto.id)).toEqual([]);
+    });
+
+    it('un desconectado deja de bloquear el Listo y la partida arranca sin esperarlo', () => {
+      const r = createRoom();
+      const memoriza = createMemorizaObjetos();
+      const events = collect(memoriza);
+      memoriza.startMatch(r.code);
+      memoriza.markReady(r.code, r.ana.socketId);
+
+      rooms.markPlayerDisconnected(r.beto.socketId);
+
+      expect(eventsOfType(events, 'memoriza_waiting_ready').at(-1)!.eligiblePlayerIds).toEqual([
+        r.ana.id,
+      ]);
+      expect(eventsOfType(events, 'memoriza_pon_atencion')).toHaveLength(1);
+    });
+
+    it('si vuelve antes de arrancar, se lo cuenta de nuevo y vuelve a bloquear', () => {
+      const r = createRoom();
+      const memoriza = createMemorizaObjetos();
+      const events = collect(memoriza);
+      memoriza.startMatch(r.code);
+
+      rooms.markPlayerDisconnected(r.beto.socketId);
+      expect(eventsOfType(events, 'memoriza_waiting_ready').at(-1)!.eligiblePlayerIds).toEqual([
+        r.ana.id,
+      ]);
+
+      rooms.rejoinRoom(r.code, r.beto.token, 'socket-b2');
+      expect(eventsOfType(events, 'memoriza_waiting_ready').at(-1)!.eligiblePlayerIds).toEqual([
+        r.ana.id,
+        r.beto.id,
+      ]);
+
+      memoriza.markReady(r.code, r.ana.socketId);
+      expect(eventsOfType(events, 'memoriza_pon_atencion')).toHaveLength(0);
+    });
+
+    it('vencida la gracia en waiting_ready, el jugador sale del gate para siempre', () => {
+      const r = createRoom();
+      const memoriza = createMemorizaObjetos();
+      const events = collect(memoriza);
+      memoriza.startMatch(r.code);
+
+      rooms.markPlayerDisconnected(r.beto.socketId, 0);
+      rooms.removeExpiredPlayers(FAR_FUTURE);
+
+      expect(eventsOfType(events, 'memoriza_waiting_ready').at(-1)!.eligiblePlayerIds).toEqual([
+        r.ana.id,
+      ]);
+    });
+
+    it('si el jugador en turno se desconecta, el turno pasa al otro equipo, su reloj se congela y no cuenta como intento', async () => {
+      const r = createRoom();
+      const memoriza = createMemorizaObjetos();
+      const events = collect(memoriza);
+      await toGuessing(memoriza, r);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(lastBoard(events).jugadorActivo!.playerId).toBe(r.ana.id);
+
+      rooms.markPlayerDisconnected(r.ana.socketId);
+
+      expect(lastBoard(events).jugadorActivo!.playerId).toBe(r.beto.id);
+      expect(eventsOfType(events, 'memoriza_intento_resultado')).toHaveLength(0);
+      const frozen = clockOf(events, r.rojos);
+      expect(frozen).toBe(TEAM_CLOCK_SECONDS - 5);
+
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(clockOf(events, r.rojos)).toBe(frozen);
+      expect(clockOf(events, r.azules)).toBe(TEAM_CLOCK_SECONDS - 20);
+    });
+
+    it('desconectarse fuera de turno no cambia el turno', async () => {
+      const r = createRoom();
+      const memoriza = createMemorizaObjetos();
+      const events = collect(memoriza);
+      await toGuessing(memoriza, r);
+
+      rooms.markPlayerDisconnected(r.beto.socketId);
+
+      expect(lastBoard(events).jugadorActivo!.playerId).toBe(r.ana.id);
+    });
+
+    it('la rotación salta al compañero desconectado y lo retoma cuando vuelve', async () => {
+      const r = createRoom(true);
+      const memoriza = createMemorizaObjetos();
+      const events = collect(memoriza);
+      await toGuessing(memoriza, r);
+      expect(lastBoard(events).jugadorActivo!.playerId).toBe(r.ana.id);
+
+      rooms.markPlayerDisconnected(r.cami!.socketId);
+      memoriza.submitGuess(r.code, r.ana.socketId, 'zzzz'); // falla → Azules
+      expect(lastBoard(events).jugadorActivo!.playerId).toBe(r.beto.id);
+      memoriza.submitGuess(r.code, r.beto.socketId, 'zzzz'); // falla → Rojos
+      // Cami sigue desconectada: le vuelve a tocar a Ana, no se congela en ella.
+      expect(lastBoard(events).jugadorActivo!.playerId).toBe(r.ana.id);
+
+      rooms.rejoinRoom(r.code, r.cami!.token, 'socket-c2');
+      memoriza.submitGuess(r.code, r.ana.socketId, 'zzzz');
+      memoriza.submitGuess(r.code, r.beto.socketId, 'zzzz');
+      expect(lastBoard(events).jugadorActivo!.playerId).toBe(r.cami!.id);
+    });
+
+    it('si el otro equipo no tiene a nadie conectado, el mismo equipo sigue jugando solo sin perder tiempo', async () => {
+      const r = createRoom();
+      const memoriza = createMemorizaObjetos();
+      const events = collect(memoriza);
+      await toGuessing(memoriza, r);
+      rooms.markPlayerDisconnected(r.beto.socketId);
+
+      memoriza.submitGuess(r.code, r.ana.socketId, 'zzzz');
+
+      expect(lastBoard(events).jugadorActivo!.playerId).toBe(r.ana.id);
+      expect(lastBoard(events).equipoActivoId).toBe(r.rojos);
+    });
+
+    it('si nadie conectado puede jugar la partida se pausa, el reloj no corre, y la primera reconexión la reanuda', async () => {
+      const r = createRoom();
+      const memoriza = createMemorizaObjetos();
+      const events = collect(memoriza);
+      await toGuessing(memoriza, r);
+      await vi.advanceTimersByTimeAsync(3000);
+
+      rooms.markPlayerDisconnected(r.ana.socketId); // pasa a Beto
+      rooms.markPlayerDisconnected(r.beto.socketId); // nadie puede jugar
+
+      expect(lastBoard(events).jugadorActivo).toBeNull();
+      const rojos = clockOf(events, r.rojos);
+      const azules = clockOf(events, r.azules);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(clockOf(events, r.rojos)).toBe(rojos);
+      expect(clockOf(events, r.azules)).toBe(azules);
+      expect(rooms.getRoom(r.code)!.status).toBe('jugando');
+
+      rooms.rejoinRoom(r.code, r.ana.token, 'socket-a2');
+
+      expect(lastBoard(events).jugadorActivo!.playerId).toBe(r.ana.id);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(clockOf(events, r.rojos)).toBe(rojos - 2);
+    });
+
+    it('si quien vuelve es de un equipo sin tiempo, la pausa sigue', async () => {
+      const r = createRoom();
+      const memoriza = createMemorizaObjetos();
+      const events = collect(memoriza);
+      await toGuessing(memoriza, r);
+
+      await vi.advanceTimersByTimeAsync(TEAM_CLOCK_SECONDS * 1000); // Rojos sin tiempo → Azules
+      expect(lastBoard(events).jugadorActivo!.playerId).toBe(r.beto.id);
+      rooms.markPlayerDisconnected(r.beto.socketId); // Rojos eliminado, Azules sin nadie
+
+      expect(lastBoard(events).jugadorActivo).toBeNull();
+      rooms.rejoinRoom(r.code, r.ana.token, 'socket-a2'); // Rojos no tiene tiempo
+      expect(lastBoard(events).jugadorActivo).toBeNull();
+    });
+  });
 });
